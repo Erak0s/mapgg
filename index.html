@@ -231,7 +231,7 @@
     }
     .popup-link:hover { text-decoration: underline; }
 
-    /* ── Ko-fi button ── */
+    /* ── Ko-fi button ── 
     .kofi-btn {
       margin-left: auto;
       display: flex;
@@ -254,7 +254,7 @@
       border-color: #ff5e5b;
       color: #fff;
     }
-    .kofi-btn svg { flex-shrink: 0; }
+    .kofi-btn svg { flex-shrink: 0; } */
     #status {
       display: none;
       position: fixed;
@@ -273,7 +273,7 @@
       box-shadow: 0 8px 32px rgba(0,0,0,.5);
     }
     #status.error { border-color: var(--danger); color: var(--danger); }
-    #status.visible { display: block; }
+    #status.visible { display: block; } 
 
     /* Spinner */
     .spinner {
@@ -287,6 +287,21 @@
       margin-right: 8px;
     }
     @keyframes spin { to { transform: rotate(360deg); } }
+
+    .leaflet-tooltip {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--text);
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    padding: 6px 10px;
+    box-shadow: 0 4px 16px rgba(0,0,0,.5);
+  }
+  .leaflet-tooltip-top::before {
+    border-top-color: var(--border);
+  }
+
   </style>
 </head>
 <body>
@@ -306,11 +321,11 @@
     <div id="playerName"></div>
   </div>
 
-  <a class="kofi-btn" href="https://ko-fi.com/TONPSEUDO" target="_blank" rel="noopener">
+  <!-- <a class="kofi-btn" href="https://ko-fi.com/TONPSEUDO" target="_blank" rel="noopener">
     <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
       <path d="M23.881 8.948c-.773-4.085-4.859-4.593-4.859-4.593H.723c-.604 0-.679.798-.679.798s-.082 7.324-.022 11.822c.164 2.424 2.586 2.672 2.586 2.672s8.267-.023 11.966-.049c2.438-.426 2.683-2.566 2.658-3.734 4.352.24 7.422-2.831 6.649-6.916zm-11.062 3.511c-1.246 1.453-4.011 3.976-4.011 3.976s-.121.119-.31.023c-.076-.057-.108-.09-.108-.09-.443-.441-3.368-3.049-4.034-3.954-.709-.965-1.041-2.7-.091-3.71.951-1.01 3.005-1.086 4.363.407 0 0 1.565-1.782 3.468-.963 1.904.82 1.832 3.011.723 4.311zm6.173.478c-.928.116-1.682.028-1.682.028V7.284h1.77s1.971.551 1.971 2.638c0 1.913-.985 2.667-2.059 3.015z"/>
     </svg>
-  </a>
+  </a> -->
 </header>
 
 <div id="statsBar">
@@ -338,6 +353,7 @@
 <script>
 // ⚙️ Modifie cette URL si ton backend tourne ailleurs
 const BACKEND = "http://localhost:3001";
+// const BACKEND = "https://mapgg-backend-54300574783.europe-west1.run.app";
 
 // ── Map init ──────────────────────────────────────────────────────────────
 const map = L.map("map", { center: [20, 0], zoom: 2, zoomControl: true });
@@ -423,10 +439,28 @@ function renderMap({ total, offline, tournaments }, playerName) {
   if (clusterGroup) map.removeLayer(clusterGroup);
 
   clusterGroup = L.markerClusterGroup({
-    iconCreateFunction: (cluster) => makeIcon(cluster.getChildCount()),
-    maxClusterRadius: 40,
-    spiderfyOnMaxZoom: true,
-    showCoverageOnHover: false,
+      iconCreateFunction: (cluster) => makeIcon(cluster.getChildCount()),
+      maxClusterRadius: 40,
+      spiderfyOnMaxZoom: true,
+      showCoverageOnHover: false,
+      spiderfyDistanceMultiplier: 1.5,
+    });
+
+  clusterGroup.on("clustermouseover", e => {
+    const cities = [...new Set(
+      e.layer.getAllChildMarkers()
+        .map(m => m.options.tooltipCity)
+        .filter(Boolean)
+    )];
+    const label = cities.length <= 2
+      ? cities.join(" · ")
+      : `${cities[0]} · ${cities[1]} +${cities.length - 2}`;
+    e.layer.bindTooltip(`<b>${e.layer.getChildCount()} tournois</b><br><span style="color:#6b6b82;font-size:10px">${label}</span>`, {
+      direction: "top", offset: [0, -8], opacity: 1, permanent: false
+    }).openTooltip();
+  });
+  clusterGroup.on("clustermouseout", e => {
+    e.layer.unbindTooltip();
   });
 
   const countries = new Set();
@@ -452,8 +486,10 @@ function renderMap({ total, offline, tournaments }, playerName) {
       <a class="popup-link" href="https://www.start.gg/${t.slug}" target="_blank" rel="noopener">↗ Voir sur start.gg</a>
     `;
 
-    const marker = L.marker([t.lat, t.lng], { icon: makeIcon(1) });
-    marker.bindPopup(popup, { maxWidth: 260 });
+    const marker = L.marker([t.lat, t.lng], { icon: makeIcon(1), tooltipCity: [t.city, t.countryCode].filter(Boolean).join(", ") });    marker.bindPopup(popup, { maxWidth: 260 });
+    marker.bindTooltip(`<b>${t.name}</b><br><span style="color:#6b6b82;font-size:10px">${[t.city, t.countryCode].filter(Boolean).join(", ")}</span>`, {
+      direction: "top", offset: [0, -8], opacity: 1
+    });
     clusterGroup.addLayer(marker);
   }
 
