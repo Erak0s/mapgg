@@ -57,7 +57,12 @@ const GET_TOURNAMENTS = `
           lat
           lng
           images { url type }
-          events { videogame { name } }
+          events {
+            videogame { name images { url type } }
+            participants(query: { perPage: 256, filter: { userId: $userId } }) {
+              nodes { id }
+            }
+          }
         }
       }
     }
@@ -95,11 +100,25 @@ app.get("/api/tournaments/:userId", async (req, res) => {
     }
 
     // Filtre : offline uniquement, avec coordonnées GPS
-    const offline = allTournaments.filter(
-      (t) => !t.isOnline && t.lat != null && t.lng != null
-    );
+    const offline = allTournaments
+    .filter(t => !t.isOnline && t.lat != null && t.lng != null)
+    .map(t => {
+      // Garde uniquement les jeux des events où l'utilisateur a participé
+      const userGames = (t.events || [])
+        .filter(e => e.participants?.nodes?.length > 0)
+        .map(e => e.videogame)
+        .filter(Boolean);
+      // Déduplique par nom
+      const seen = new Set();
+      t.userGames = userGames.filter(g => {
+        if (seen.has(g.name)) return false;
+        seen.add(g.name);
+        return true;
+      });
+      return t;
+    });
 
-    res.json({ total: allTournaments.length, offline: offline.length, tournaments: offline });
+  res.json({ total: allTournaments.length, offline: offline.length, tournaments: offline });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
