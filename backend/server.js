@@ -57,12 +57,23 @@ const GET_TOURNAMENTS = `
           lat
           lng
           images { url type }
-          events {
-            videogame { name images { url type } }
-            participants(query: { perPage: 256, filter: { userId: $userId } }) {
-              nodes { id }
-            }
-          }
+        }
+      }
+    }
+  }
+`;
+
+const GET_USER_EVENTS = `
+  query GetUserEvents($userId: ID!, $page: Int!) {
+    user(id: $userId) {
+      events(query: {
+        page: $page
+        perPage: 50
+      }) {
+        pageInfo { totalPages }
+        nodes {
+          tournament { id }
+          videogame { name images { url type } }
         }
       }
     }
@@ -84,10 +95,11 @@ app.get("/api/player/:slug", async (req, res) => {
 app.get("/api/tournaments/:userId", async (req, res) => {
   try {
     const userId = req.params.userId;
+
+    // 1. Récupère tous les tournois
     let allTournaments = [];
     let page = 1;
     let totalPages = 1;
-
     while (page <= totalPages) {
       const data = await graphql(GET_TOURNAMENTS, { userId, page });
       const t = data.user?.tournaments;
@@ -95,30 +107,40 @@ app.get("/api/tournaments/:userId", async (req, res) => {
       totalPages = t.pageInfo.totalPages;
       allTournaments = allTournaments.concat(t.nodes || []);
       page++;
-      // Sécurité : max 10 pages (500 tournois)
       if (page > 10) break;
     }
 
-    // Filtre : offline uniquement, avec coordonnées GPS
-    const offline = allTournaments
-    .filter(t => !t.isOnline && t.lat != null && t.lng != null)
-    .map(t => {
-      // Garde uniquement les jeux des events où l'utilisateur a participé
-      const userGames = (t.events || [])
-        .filter(e => e.participants?.nodes?.length > 0)
-        .map(e => e.videogame)
-        .filter(Boolean);
-      // Déduplique par nom
-      const seen = new Set();
-      t.userGames = userGames.filter(g => {
-        if (seen.has(g.name)) return false;
-        seen.add(g.name);
-        return true;
-      });
-      return t;
-    });
+    // 2. Récupère tous les events de l'utilisateur
+    const eventsByTournament = new Map();
+    page = 1;
+    totalPages = 1;
+    while (page <= totalPages) {
+      const data = await graphql(GET_USER_EVENTS, { userId, page });
+      const e = data.user?.events;
+      if (!e) break;
+      totalPages = e.pageInfo.totalPages;
+      for (const event of (e.nodes || [])) {
+        const tid = event.tournament?.id;
+        if (!tid || !event.videogame) continue;
+        if (!eventsByTournament.has(tid)) eventsByTournament.set(tid, new Map());
+        const games = eventsByTournament.get(tid);
+        if (!games.has(event.videogame.name)) {
+          games.set(event.videogame.name, event.videogame);
+        }
+      }
+      page++;
+      if (page > 20) break;
+    }
 
-  res.json({ total: allTournaments.length, offline: offline.length, tournaments: offline });
+    // 3. Filtre offline + associe les jeux
+    const offline = allTournaments
+      .filter(t => !t.isOnline && t.lat != null && t.lng != null)
+      .map(t => {
+        t.userGames = [...(eventsByTournament.get(t.id)?.values() || [])];
+        return t;
+      });
+
+    res.json({ total: allTournaments.length, offline: offline.length, tournaments: offline });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

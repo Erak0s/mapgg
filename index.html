@@ -302,6 +302,45 @@
     border-top-color: var(--border);
   }
 
+  #filterBar {
+    display: none;
+    gap: 10px;
+    padding: 10px 32px;
+    background: var(--bg);
+    border-bottom: 1px solid var(--border);
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  #filterBar.visible { display: flex; }
+
+  .game-filter {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 5px 12px 5px 6px;
+    cursor: pointer;
+    font-size: 12px;
+    font-family: 'DM Mono', monospace;
+    color: var(--muted);
+    transition: all .15s;
+    user-select: none;
+  }
+  .game-filter img {
+    width: 20px; height: 20px;
+    border-radius: 4px;
+    object-fit: cover;
+  }
+  .game-filter.active {
+    border-color: var(--accent);
+    color: var(--text);
+  }
+  .game-filter.active img {
+    outline: 1px solid var(--accent);
+    border-radius: 4px;
+  }
   </style>
 </head>
 <body>
@@ -343,6 +382,7 @@
   </div>
 </div>
 
+<div id="filterBar"></div>
 <div id="map"></div>
 <div id="status"></div>
 
@@ -352,8 +392,8 @@
 
 <script>
 // ⚙️ Modifie cette URL si ton backend tourne ailleurs
-// const BACKEND = "http://localhost:3001";
-const BACKEND = "https://mapgg-backend-54300574783.europe-west1.run.app";
+const BACKEND = "http://localhost:3001";
+// const BACKEND = "https://mapgg-backend-54300574783.europe-west1.run.app";
 
 // ── Map init ──────────────────────────────────────────────────────────────
 const map = L.map("map", { center: [20, 0], zoom: 2, zoomControl: true });
@@ -434,83 +474,156 @@ async function search() {
 }
 
 // ── Render map ────────────────────────────────────────────────────────────
-function renderMap({ total, offline, tournaments }, playerName) {
-  // Nettoie l'ancienne couche
-  if (clusterGroup) map.removeLayer(clusterGroup);
+let allMarkers = [];
+let activeGames = new Set();
 
-  clusterGroup = L.markerClusterGroup({
+function renderMap({ total, offline, tournaments }, playerName) {
+    if (clusterGroup) map.removeLayer(clusterGroup);
+    allMarkers = [];
+    activeGames = new Set();
+
+    const countries = new Set();
+
+    for (const t of tournaments) {
+      if (t.countryCode) countries.add(t.countryCode);
+
+      const date = t.startAt
+        ? new Date(t.startAt * 1000).toLocaleDateString("fr-FR", { year: "numeric", month: "short", day: "numeric" })
+        : "Date inconnue";
+
+      const games = t.userGames || [];
+      games.forEach(g => activeGames.add(g.name));
+
+      const gameTag = games.length
+        ? games.slice(0, 2).map(g => `<span class="popup-game">${g.name}</span>`).join(" ")
+        : "";
+      const img = t.images?.find(i => i.type === "profile")?.url;
+      const imgTag = img ? `<img src="${img}" style="width:100%;border-radius:4px;margin-bottom:8px;object-fit:cover;max-height:80px" />` : "";
+
+      const popup = `
+        ${imgTag}
+        <div class="popup-title">${t.name}</div>
+        <div class="popup-meta">📅 ${date}</div>
+        <div class="popup-meta">📍 ${[t.city, t.countryCode].filter(Boolean).join(", ")}</div>
+        ${gameTag}
+        <a class="popup-link" href="https://www.start.gg/${t.slug}" target="_blank" rel="noopener">↗ Voir sur start.gg</a>
+      `;
+
+      const marker = L.marker([t.lat, t.lng], {
+        icon: makeIcon(1),
+        tooltipCity: [t.city, t.countryCode].filter(Boolean).join(", "),
+        gameNames: games.map(g => g.name),
+      });
+      marker.bindPopup(popup, { maxWidth: 260 });
+      marker.bindTooltip(`<b>${t.name}</b><br><span style="color:#6b6b82;font-size:10px">${[t.city, t.countryCode].filter(Boolean).join(", ")}</span>`, {
+        direction: "top", offset: [0, -8], opacity: 1
+      });
+      allMarkers.push(marker);
+    }
+
+    // Stats
+    document.getElementById("statTotal").textContent = total;
+    document.getElementById("statOffline").textContent = offline;
+    document.getElementById("statCountries").textContent = countries.size;
+    document.querySelector("#statTotal + .stat-label").textContent    = total <= 1    ? "Tournoi total"            : "Tournois totaux";
+    document.querySelector("#statOffline + .stat-label").textContent  = offline <= 1  ? "Tournoi offline affiché"  : "Tournois offline affichés";
+    document.querySelector("#statCountries + .stat-label").textContent = countries.size <= 1 ? "Pays visité" : "Pays visités";
+    document.getElementById("statsBar").classList.add("visible");
+    showStatus(`✅ Carte de ${playerName} chargée — ${offline} tournoi${offline > 1 ? "s" : ""} affiché${offline > 1 ? "s" : ""}`, "info");
+
+    // Barre de filtres
+    buildFilterBar(tournaments);
+
+    // Affichage initial
+    applyFilters();
+
+    if (allMarkers.length > 0) {
+      setTimeout(() => {
+        if (clusterGroup) {
+          const bounds = clusterGroup.getBounds();
+          if (bounds.isValid()) map.fitBounds(bounds, { padding: [40, 40], maxZoom: 8 });
+        }
+      }, 100);
+    }
+  }
+
+  function buildFilterBar(tournaments) {
+    const bar = document.getElementById("filterBar");
+    bar.innerHTML = "";
+
+    // Collecte tous les jeux uniques avec leur image
+    const gameMap = new Map();
+    for (const t of tournaments) {
+      for (const g of (t.userGames || [])) {
+        if (!gameMap.has(g.name)) {
+          const imgUrl = g.images?.find(i => i.type === "profile")?.url
+                      || g.images?.[0]?.url
+                      || "";
+          gameMap.set(g.name, imgUrl);
+        }
+      }
+    }
+
+    if (gameMap.size === 0) return;
+
+    // Crée un badge par jeu
+    for (const [name, imgUrl] of gameMap.entries()) {
+      const badge = document.createElement("div");
+      badge.className = "game-filter active";
+      badge.dataset.game = name;
+      badge.innerHTML = imgUrl
+        ? `<img src="${imgUrl}" alt="${name}" />${name}`
+        : name;
+      badge.addEventListener("click", () => {
+        if (activeGames.has(name)) {
+          activeGames.delete(name);
+          badge.classList.remove("active");
+        } else {
+          activeGames.add(name);
+          badge.classList.add("active");
+        }
+        applyFilters();
+      });
+      bar.appendChild(badge);
+    }
+
+    bar.classList.add("visible");
+  }
+
+  function applyFilters() {
+    if (clusterGroup) map.removeLayer(clusterGroup);
+
+    clusterGroup = L.markerClusterGroup({
       iconCreateFunction: (cluster) => makeIcon(cluster.getChildCount()),
       maxClusterRadius: 40,
       spiderfyOnMaxZoom: true,
       showCoverageOnHover: false,
-      spiderfyDistanceMultiplier: 1.5,
     });
 
-  clusterGroup.on("clustermouseover", e => {
-    const cities = [...new Set(
-      e.layer.getAllChildMarkers()
-        .map(m => m.options.tooltipCity)
-        .filter(Boolean)
-    )];
-    const label = cities.length <= 2
-      ? cities.join(" · ")
-      : `${cities[0]} · ${cities[1]} +${cities.length - 2}`;
-    e.layer.bindTooltip(`<b>${e.layer.getChildCount()} tournois</b><br><span style="color:#6b6b82;font-size:10px">${label}</span>`, {
-      direction: "top", offset: [0, -8], opacity: 1, permanent: false
-    }).openTooltip();
-  });
-  clusterGroup.on("clustermouseout", e => {
-    e.layer.unbindTooltip();
-  });
-
-  const countries = new Set();
-
-  for (const t of tournaments) {
-    if (t.countryCode) countries.add(t.countryCode);
-
-    const date = t.startAt
-      ? new Date(t.startAt * 1000).toLocaleDateString("fr-FR", { year: "numeric", month: "short", day: "numeric" })
-      : "Date inconnue";
-
-    const games = [...new Set((t.events || []).map(e => e?.videogame?.name).filter(Boolean))];
-    const gameTag = games.length ? `<span class="popup-game">${games.slice(0, 2).join(" · ")}</span>` : "";
-    const img = t.images?.find(i => i.type === "profile")?.url;
-    const imgTag = img ? `<img src="${img}" style="width:100%;border-radius:4px;margin-bottom:8px;object-fit:cover;max-height:80px" />` : "";
-
-    const popup = `
-      ${imgTag}
-      <div class="popup-title">${t.name}</div>
-      <div class="popup-meta">📅 ${date}</div>
-      <div class="popup-meta">📍 ${[t.city, t.countryCode].filter(Boolean).join(", ")}</div>
-      ${gameTag}
-      <a class="popup-link" href="https://www.start.gg/${t.slug}" target="_blank" rel="noopener">↗ Voir sur start.gg</a>
-    `;
-
-    const marker = L.marker([t.lat, t.lng], { icon: makeIcon(1), tooltipCity: [t.city, t.countryCode].filter(Boolean).join(", ") });    marker.bindPopup(popup, { maxWidth: 260 });
-    marker.bindTooltip(`<b>${t.name}</b><br><span style="color:#6b6b82;font-size:10px">${[t.city, t.countryCode].filter(Boolean).join(", ")}</span>`, {
-      direction: "top", offset: [0, -8], opacity: 1
+    clusterGroup.on("clustermouseover", e => {
+      const cities = [...new Set(
+        e.layer.getAllChildMarkers()
+          .map(m => m.options.tooltipCity)
+          .filter(Boolean)
+      )];
+      const label = cities.length <= 2
+        ? cities.join(" · ")
+        : `${cities[0]} · ${cities[1]} +${cities.length - 2}`;
+      e.layer.bindTooltip(`<b>${e.layer.getChildCount()} tournois</b><br><span style="color:#6b6b82;font-size:10px">${label}</span>`, {
+        direction: "top", offset: [0, -8], opacity: 1, permanent: false
+      }).openTooltip();
     });
-    clusterGroup.addLayer(marker);
+    clusterGroup.on("clustermouseout", e => e.layer.unbindTooltip());
+
+    const filtered = allMarkers.filter(m => {
+      const games = m.options.gameNames || [];
+      if (games.length === 0) return activeGames.size === 0 || true;
+      return games.some(g => activeGames.has(g));
+    });
+
+    clusterGroup.addLayers(filtered);
+    map.addLayer(clusterGroup);
   }
-
-  map.addLayer(clusterGroup);
-
-  // Stats
-  document.getElementById("statTotal").textContent = total;
-  document.getElementById("statOffline").textContent = offline;
-  document.getElementById("statCountries").textContent = countries.size;
-  document.querySelector("#statTotal + .stat-label").textContent = total <= 1 ? "Tournoi" : "Tournois";
-  document.querySelector("#statOffline + .stat-label").textContent = offline <= 1 ? "Tournoi offline affiché" : "Tournois offline affichés";
-  document.querySelector("#statCountries + .stat-label").textContent = countries.size <= 1 ? "Pays visité" : "Pays visités";
-  document.getElementById("statsBar").classList.add("visible");
-  showStatus(`✅ Carte de ${playerName} chargée — ${offline} tournois affichés`, "info");
-
-  // Zoom sur les marqueurs
-  if (tournaments.length > 0) {
-    const bounds = clusterGroup.getBounds();
-    map.fitBounds(bounds, { padding: [40, 40], maxZoom: 8 });
-  }
-}
 
 // ── Events ────────────────────────────────────────────────────────────────
 document.getElementById("searchBtn").addEventListener("click", search);
