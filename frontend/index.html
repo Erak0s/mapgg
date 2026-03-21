@@ -16,31 +16,18 @@
        🎨 THÈME — modifie uniquement ce bloc pour changer l'aspect
        ============================================================ */
     :root {
-      /* Couleurs de base */
-      --bg:        #0a0a0f;   /* fond général */
-      --surface:   #111118;   /* cartes, header, stats bar */
-      --border:    #1e1e2e;   /* bordures, séparateurs */
-
-      /* Couleurs de texte */
-      --text:      #e8e8f0;   /* texte principal */
-      --muted:     #6b6b82;   /* texte secondaire, labels */
-
-      /* Couleurs d'accentuation */
-      --accent:    #20DF96;   /* couleur principale (logo, markers, bouton GO) */
-      --accent2:   #DF2069;   /* couleur secondaire (stats, badges jeux) */
-      --danger:    #ff4747;   /* erreurs */
-
-      /* Ko-fi */
-       --kofi:      #ff5e5b;   /*couleur du bouton Ko-fi */
-
-      /* Carte Leaflet — filtre CSS appliqué sur les tuiles */
+      --bg:        #0a0a0f;
+      --surface:   #111118;
+      --border:    #1e1e2e;
+      --text:      #e8e8f0;
+      --muted:     #6b6b82;
+      --accent:    #20DF96;
+      --accent2:   #DF2069;
+      --danger:    #ff4747;
+      --kofi:      #ff5e5b;
       --map-filter: brightness(.72) saturate(.55) hue-rotate(195deg);
-      --map-bg:    #0a0a0f;   /* couleur des mers (fond de la carte) */
-
-      /* Formes */
+      --map-bg:    #0a0a0f;
       --radius:    6px;
-
-      /* Ombres — dérivées automatiquement des couleurs */
       --shadow-sm:  0 4px 16px rgba(0, 0, 0, .5);
       --shadow-md:  0 8px 32px rgba(0, 0, 0, .6);
       --glow-accent: 0 0 8px var(--accent);
@@ -59,7 +46,6 @@
       flex-direction: column;
     }
 
-    /* ── Header ── */
     header {
       padding: 24px 32px 20px;
       border-bottom: 1px solid var(--border);
@@ -118,7 +104,6 @@
     button#searchBtn:active { transform: scale(.97); }
     button#searchBtn:disabled { opacity: .4; cursor: not-allowed; }
 
-    /* ── Player card ── */
     #playerCard {
       display: none;
       align-items: center;
@@ -137,6 +122,33 @@
       font-family: 'Bebas Neue', sans-serif;
       font-size: 20px;
       color: var(--accent);
+    }
+
+    /* ── Lang toggle ── */
+    #langToggle {
+      display: flex;
+      align-items: center;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 3px;
+      gap: 0;
+      flex-shrink: 0;
+    }
+    .lang-btn {
+      background: transparent;
+      border: none;
+      border-radius: 16px;
+      padding: 5px 12px;
+      color: var(--muted);
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 14px;
+      cursor: pointer;
+      transition: background .2s, color .2s;
+    }
+    .lang-btn.active {
+      background: var(--accent);
+      color: var(--bg);
     }
 
     /* ── Ko-fi button ── */
@@ -164,7 +176,6 @@
     }
     .kofi-btn svg { flex-shrink: 0; }
 
-    /* ── Stats bar ── */
     #statsBar {
       display: none;
       gap: 24px;
@@ -175,11 +186,7 @@
     }
     #statsBar.visible { display: flex; }
 
-    .stat {
-      display: flex;
-      align-items: baseline;
-      gap: 8px;
-    }
+    .stat { display: flex; align-items: baseline; gap: 8px; }
     .stat-value {
       font-family: 'Bebas Neue', sans-serif;
       font-size: 24px;
@@ -192,7 +199,6 @@
       letter-spacing: .08em;
     }
 
-    /* ── Filter bar ── */
     #filterBar {
       display: none;
       gap: 10px;
@@ -219,28 +225,12 @@
       transition: all .15s;
       user-select: none;
     }
-    .game-filter img {
-      width: 20px; height: 20px;
-      border-radius: 4px;
-      object-fit: cover;
-    }
-    .game-filter.active {
-      border-color: var(--accent);
-      color: var(--text);
-    }
-    .game-filter.active img {
-      outline: 1px solid var(--accent);
-      border-radius: 4px;
-    }
+    .game-filter img { width: 20px; height: 20px; border-radius: 4px; object-fit: cover; }
+    .game-filter.active { border-color: var(--accent); color: var(--text); }
+    .game-filter.active img { outline: 1px solid var(--accent); border-radius: 4px; }
 
-    /* ── Map ── */
-    #map {
-      flex: 1;
-      min-height: 500px;
-      background: var(--map-bg);
-    }
+    #map { flex: 1; min-height: 500px; background: var(--map-bg); }
 
-    /* Leaflet overrides */
     .leaflet-tile { filter: var(--map-filter); }
     .leaflet-control-zoom a {
       background: var(--surface) !important;
@@ -255,7 +245,6 @@
     }
     .leaflet-control-attribution a { color: var(--muted) !important; }
 
-    /* Tooltip */
     .leaflet-tooltip {
       background: var(--surface);
       border: 1px solid var(--border);
@@ -268,7 +257,6 @@
     }
     .leaflet-tooltip-top::before { border-top-color: var(--border); }
 
-    /* Custom marker */
     .t-marker {
       width: 12px; height: 12px;
       border-radius: 50%;
@@ -279,7 +267,6 @@
     }
     .t-marker:hover { transform: scale(1.4); }
 
-    /* Cluster bubble */
     .cluster-bubble {
       background: var(--accent);
       color: var(--bg);
@@ -291,7 +278,6 @@
       box-shadow: var(--glow-accent-lg);
     }
 
-    /* Popup */
     .leaflet-popup-content-wrapper {
       background: var(--surface);
       border: 1px solid var(--border);
@@ -310,12 +296,7 @@
       margin-bottom: 6px;
       line-height: 1.2;
     }
-    .popup-meta {
-      font-family: 'DM Mono', monospace;
-      font-size: 11px;
-      color: var(--muted);
-      margin-top: 3px;
-    }
+    .popup-meta { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--muted); margin-top: 3px; }
     .popup-game {
       display: inline-block;
       margin-top: 8px;
@@ -335,7 +316,6 @@
     }
     .popup-link:hover { text-decoration: underline; }
 
-    /* ── Status / Error ── */
     #status {
       display: none;
       position: fixed;
@@ -356,7 +336,6 @@
     #status.error { border-color: var(--danger); color: var(--danger); }
     #status.visible { display: block; }
 
-    /* Spinner */
     .spinner {
       display: inline-block;
       width: 14px; height: 14px;
@@ -385,6 +364,11 @@
   <div id="playerCard">
     <img id="playerAvatar" src="" alt="avatar" />
     <div id="playerName"></div>
+  </div>
+
+  <div id="langToggle">
+    <button class="lang-btn active" data-lang="fr">FR</button>
+    <button class="lang-btn" data-lang="en">EN</button>
   </div>
 
   <!-- <a class="kofi-btn" href="https://ko-fi.com/TONPSEUDO" target="_blank" rel="noopener">
@@ -422,34 +406,64 @@
 <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
 
 <script>
-// ⚙️ URL du backend
 const BACKEND = "https://mapgg-backend-54300574783.europe-west1.run.app";
+
+// ── Traductions ───────────────────────────────────────────────────────────
+const TRANSLATIONS = {
+  fr: {
+    placeholder:      "ID start.gg (ex: user/abc123 ou abc123)",
+    searchBtn:        "Chercher",
+    statTotal1:       "Tournoi total",       statTotalN:      "Tournois totaux",
+    statOffline1:     "Tournoi offline affiché", statOfflineN: "Tournois offline affichés",
+    statCountries1:   "Pays visité",         statCountriesN:  "Pays visités",
+    statGames1:       "Jeu joué",            statGamesN:      "Jeux joués",
+    loading1:         "Recherche du joueur…",
+    loading2:         "Chargement des tournois…",
+    errNotFound:      "Joueur introuvable",
+    errServer:        "Erreur serveur",
+    popupDateUnknown: "Date inconnue",
+    popupLink:        "↗ Voir sur start.gg",
+    clusterLabel:     (n) => `${n} tournois`,
+    statusDone:       (name, n) => `✅ Carte de ${name} chargée — ${n} tournoi${n > 1 ? "s" : ""} affiché${n > 1 ? "s" : ""}`,
+    locale:           "fr-FR",
+  },
+  en: {
+    placeholder:      "start.gg ID (ex: user/abc123 or abc123)",
+    searchBtn:        "Search",
+    statTotal1:       "Tournament",          statTotalN:      "Tournaments",
+    statOffline1:     "Offline tournament",  statOfflineN:    "Offline tournaments",
+    statCountries1:   "Country visited",     statCountriesN:  "Countries visited",
+    statGames1:       "Game played",         statGamesN:      "Games played",
+    loading1:         "Looking up player…",
+    loading2:         "Loading tournaments…",
+    errNotFound:      "Player not found",
+    errServer:        "Server error",
+    popupDateUnknown: "Unknown date",
+    popupLink:        "↗ View on start.gg",
+    clusterLabel:     (n) => `${n} tournament${n > 1 ? "s" : ""}`,
+    statusDone:       (name, n) => `✅ ${name}'s map loaded — ${n} tournament${n > 1 ? "s" : ""} displayed`,
+    locale:           "en-GB",
+  }
+};
+
+let lang = "fr";
+const tr = () => TRANSLATIONS[lang];
+
+function applyLang() {
+  document.getElementById("slugInput").placeholder = tr().placeholder;
+  document.getElementById("searchBtn").textContent = tr().searchBtn;
+  document.querySelectorAll(".lang-btn").forEach(b => {
+    b.classList.toggle("active", b.dataset.lang === lang);
+  });
+}
 
 // ── Map init ──────────────────────────────────────────────────────────────
 const map = L.map("map", { center: [20, 0], zoom: 2, zoomControl: true });
 
-// Openstreetmap version - working but names in Europe are all in English
 L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
   attribution: '© <a href="https://www.openstreetmap.org/">OpenStreetMap</a> © <a href="https://carto.com/">CARTO</a>',
   maxZoom: 19,
 }).addTo(map);
-
-// // Stadia version - working but no region names
-// L.tileLayer("https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}{r}.png?api_key=3d7e46ab-968b-4a1a-a14c-f023667efc8e", {
-//   attribution: '© <a href="https://stadiamaps.com/">Stadia Maps</a> © <a href="https://www.openstreetmap.org/">OpenStreetMap</a>',
-//   maxZoom: 20,
-// }).addTo(map);
-
-// // Test
-// L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png", {
-//   attribution: '© <a href="https://www.openstreetmap.org/">OpenStreetMap</a> © <a href="https://carto.com/">CARTO</a>',
-//   maxZoom: 19,
-// }).addTo(map);
-
-// L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}{r}.png", {
-//   maxZoom: 19,
-//   opacity: 1,
-// }).addTo(map);
 
 let clusterGroup = null;
 let allMarkers   = [];
@@ -459,9 +473,7 @@ let activeGames  = new Set();
 function showStatus(msg, type = "info") {
   const el = document.getElementById("status");
   el.className = "visible" + (type === "error" ? " error" : "");
-  el.innerHTML = type === "loading"
-    ? `<span class="spinner"></span>${msg}`
-    : msg;
+  el.innerHTML = type === "loading" ? `<span class="spinner"></span>${msg}` : msg;
   if (type !== "loading") setTimeout(() => el.classList.remove("visible"), 4000);
 }
 
@@ -485,23 +497,22 @@ async function search() {
   if (!slug) return;
 
   document.getElementById("searchBtn").disabled = true;
-  showStatus("Recherche du joueur…", "loading");
+  showStatus(tr().loading1, "loading");
 
   try {
     const userRes = await fetch(`${BACKEND}/api/player/${encodeURIComponent(slug)}`);
     const user = await userRes.json();
-    if (!userRes.ok) throw new Error(user.error || "Joueur introuvable");
-
+    if (!userRes.ok) throw new Error(tr().errNotFound);
     const avatar = user.images?.find(i => i.type === "profile")?.url || "";
     document.getElementById("playerAvatar").src = avatar;
     document.getElementById("playerName").textContent = user.displayName;
     document.getElementById("playerCard").classList.add("visible");
 
-    showStatus("Chargement des tournois…", "loading");
+    showStatus(tr().loading2, "loading");
 
     const tRes = await fetch(`${BACKEND}/api/tournaments/${user.id}`);
     const tData = await tRes.json();
-    if (!tRes.ok) throw new Error(tData.error || "Erreur serveur");
+    if (!tRes.ok) throw new Error(tData.error || tr().errServer);
 
     renderMap(tData, user.displayName);
 
@@ -518,57 +529,59 @@ function renderMap({ total, offline, tournaments }, playerName) {
   allMarkers  = [];
   activeGames = new Set();
 
+  const t = tr();
   const countries = new Set();
 
-  for (const t of tournaments) {
-    if (t.countryCode) countries.add(t.countryCode);
+  for (const tournament of tournaments) {
+    if (tournament.countryCode) countries.add(tournament.countryCode);
 
-    const date = t.startAt
-      ? new Date(t.startAt * 1000).toLocaleDateString("fr-FR", { year: "numeric", month: "short", day: "numeric" })
-      : "Date inconnue";
+    const date = tournament.startAt
+      ? new Date(tournament.startAt * 1000).toLocaleDateString(t.locale, { year: "numeric", month: "short", day: "numeric" })
+      : t.popupDateUnknown;
 
-    const games = t.userGames || [];
+    const games = tournament.userGames || [];
     games.forEach(g => activeGames.add(g.name));
 
     const gameTag = games.length
       ? games.slice(0, 2).map(g => `<span class="popup-game">${g.name}</span>`).join(" ")
       : "";
-    const img    = t.images?.find(i => i.type === "profile")?.url;
+    const img    = tournament.images?.find(i => i.type === "profile")?.url;
     const imgTag = img ? `<img src="${img}" style="width:100%;border-radius:4px;margin-bottom:8px;object-fit:cover;max-height:80px" />` : "";
+    const location = [tournament.city, tournament.countryCode].filter(Boolean).join(", ");
 
     const popup = `
       ${imgTag}
-      <div class="popup-title">${t.name}</div>
+      <div class="popup-title">${tournament.name}</div>
       <div class="popup-meta">📅 ${date}</div>
-      <div class="popup-meta">📍 ${[t.city, t.countryCode].filter(Boolean).join(", ")}</div>
+      <div class="popup-meta">📍 ${location}</div>
       ${gameTag}
-      <a class="popup-link" href="https://www.start.gg/${t.slug}" target="_blank" rel="noopener">↗ Voir sur start.gg</a>
+      <a class="popup-link" href="https://www.start.gg/${tournament.slug}" target="_blank" rel="noopener">${t.popupLink}</a>
     `;
 
-    const marker = L.marker([t.lat, t.lng], {
+    const marker = L.marker([tournament.lat, tournament.lng], {
       icon: makeIcon(1),
-      tooltipCity: [t.city, t.countryCode].filter(Boolean).join(", "),
+      tooltipCity: location,
       gameNames: games.map(g => g.name),
     });
     marker.bindPopup(popup, { maxWidth: 260 });
-    marker.bindTooltip(`<b>${t.name}</b><br><span style="color:var(--muted);font-size:10px">${[t.city, t.countryCode].filter(Boolean).join(", ")}</span>`, {
+    marker.bindTooltip(`<b>${tournament.name}</b><br><span style="color:var(--muted);font-size:10px">${location}</span>`, {
       direction: "top", offset: [0, -8], opacity: 1
     });
     allMarkers.push(marker);
   }
 
   // Stats
-  document.getElementById("statTotal").textContent = total;
-  document.getElementById("statOffline").textContent = offline;
+  document.getElementById("statTotal").textContent     = total;
+  document.getElementById("statOffline").textContent   = offline;
   document.getElementById("statCountries").textContent = countries.size;
-  document.getElementById("statGames").textContent = activeGames.size;
-  document.querySelector("#statTotal + .stat-label").textContent     = total <= 1          ? "Tournoi total"           : "Tournois totaux";
-  document.querySelector("#statOffline + .stat-label").textContent   = offline <= 1        ? "Tournoi offline affiché" : "Tournois offline affichés";
-  document.querySelector("#statCountries + .stat-label").textContent = countries.size <= 1 ? "Pays visité"             : "Pays visités";
-  document.querySelector("#statGames + .stat-label").textContent     = activeGames.size <= 1 ? "Jeu joué"              : "Jeux joués";
+  document.getElementById("statGames").textContent     = activeGames.size;
+  document.querySelector("#statTotal + .stat-label").textContent     = total <= 1          ? t.statTotal1     : t.statTotalN;
+  document.querySelector("#statOffline + .stat-label").textContent   = offline <= 1        ? t.statOffline1   : t.statOfflineN;
+  document.querySelector("#statCountries + .stat-label").textContent = countries.size <= 1 ? t.statCountries1 : t.statCountriesN;
+  document.querySelector("#statGames + .stat-label").textContent     = activeGames.size <= 1 ? t.statGames1   : t.statGamesN;
   document.getElementById("statsBar").classList.add("visible");
 
-  showStatus(`✅ Carte de ${playerName} chargée — ${offline} tournoi${offline > 1 ? "s" : ""} affiché${offline > 1 ? "s" : ""}`, "info");
+  showStatus(t.statusDone(playerName, offline), "info");
 
   buildFilterBar(tournaments);
   applyFilters();
@@ -639,7 +652,8 @@ function applyFilters() {
     const label = cities.length <= 2
       ? cities.join(" · ")
       : `${cities[0]} · ${cities[1]} +${cities.length - 2}`;
-    e.layer.bindTooltip(`<b>${e.layer.getChildCount()} tournois</b><br><span style="color:var(--muted);font-size:10px">${label}</span>`, {
+    const count = e.layer.getChildCount();
+    e.layer.bindTooltip(`<b>${tr().clusterLabel(count)}</b><br><span style="color:var(--muted);font-size:10px">${label}</span>`, {
       direction: "top", offset: [0, -8], opacity: 1, permanent: false
     }).openTooltip();
   });
@@ -659,6 +673,12 @@ function applyFilters() {
 document.getElementById("searchBtn").addEventListener("click", search);
 document.getElementById("slugInput").addEventListener("keydown", e => {
   if (e.key === "Enter") search();
+});
+document.querySelectorAll(".lang-btn").forEach(b => {
+  b.addEventListener("click", () => {
+    lang = b.dataset.lang;
+    applyLang();
+  });
 });
 </script>
 </body>
