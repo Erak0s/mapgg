@@ -616,7 +616,7 @@ function renderMap({ total, offline, tournaments }, playerName) {
 
     const filtered = allMarkers.filter(m => {
       const games = m.options.gameNames || [];
-      if (games.length === 0) return activeGames.size === 0 || true;
+      if (games.length === 0) return false;
       return games.some(g => activeGames.has(g));
     });
 
