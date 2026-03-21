@@ -5,7 +5,7 @@ steps:
       - run
       - deploy
       - mapgg-backend
-      - --source=.
+      - --source=./backend
       - --region=europe-west1
       - --allow-unauthenticated
 
