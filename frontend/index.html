@@ -380,6 +380,10 @@
     <span class="stat-value" id="statCountries">0</span>
     <span class="stat-label">Pays visités</span>
   </div>
+  <div class="stat">
+    <span class="stat-value" id="statGames">0</span>
+    <span class="stat-label">Jeux joués</span>
+  </div>
 </div>
 
 <div id="filterBar"></div>
@@ -527,6 +531,8 @@ function renderMap({ total, offline, tournaments }, playerName) {
     document.querySelector("#statTotal + .stat-label").textContent    = total <= 1    ? "Tournoi total"            : "Tournois totaux";
     document.querySelector("#statOffline + .stat-label").textContent  = offline <= 1  ? "Tournoi offline affiché"  : "Tournois offline affichés";
     document.querySelector("#statCountries + .stat-label").textContent = countries.size <= 1 ? "Pays visité" : "Pays visités";
+    document.getElementById("statGames").textContent = activeGames.size;
+    document.querySelector("#statGames + .stat-label").textContent = activeGames.size <= 1 ? "Jeu joué" : "Jeux joués";
     document.getElementById("statsBar").classList.add("visible");
     showStatus(`✅ Carte de ${playerName} chargée — ${offline} tournoi${offline > 1 ? "s" : ""} affiché${offline > 1 ? "s" : ""}`, "info");
 
