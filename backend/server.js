@@ -8,7 +8,7 @@ app.use(cors({
     "http://127.0.0.1:5500",
     "null",
     null,
-    "https://TON-SITE.netlify.app"
+    "https://mapgg.netlify.app"
   ]
 }));
 app.use(express.json());
