@@ -41,6 +41,7 @@
     #shareBtn.visible { display:flex; }
     #shareBtn:hover { border-color:var(--accent); color:var(--accent); }
     #shareBtn.copied { border-color:var(--accent); color:var(--accent); }
+
     #langToggle { display:flex; align-items:center; background:var(--surface); border:1px solid var(--border); border-radius:20px; padding:3px; gap:0; flex-shrink:0; margin-left:auto; }
     .lang-btn { background:transparent; border:none; border-radius:16px; padding:5px 12px; color:var(--muted); font-family:'Bebas Neue',sans-serif; font-size:14px; cursor:pointer; transition:background .2s,color .2s; }
     .lang-btn.active { background:var(--accent); color:var(--bg); }
@@ -49,14 +50,14 @@
     .stat { display:flex; align-items:baseline; gap:8px; }
     .stat-value { font-family:'Bebas Neue',sans-serif; font-size:24px; color:var(--accent2); }
     .stat-label { font-size:12px; color:var(--muted); text-transform:uppercase; letter-spacing:.08em; }
-    #filterBar { display:none; gap:10px; padding:10px 32px; background:var(--bg); border-bottom:1px solid var(--border); flex-wrap:wrap; align-items:center; }
+    /* ── Combined filter + view bar ── */
+    #filterBar { display:none; gap:10px; padding:8px 32px; background:var(--bg); border-bottom:1px solid var(--border); flex-wrap:wrap; align-items:center; }
     #filterBar.visible { display:flex; }
+    .filter-separator { width:1px; height:20px; background:var(--border); flex-shrink:0; margin:0 2px; }
     .game-filter { display:flex; align-items:center; gap:6px; background:var(--surface); border:1px solid var(--border); border-radius:20px; padding:5px 12px 5px 6px; cursor:pointer; font-size:12px; font-family:'DM Mono',monospace; color:var(--muted); transition:all .15s; user-select:none; }
     .game-filter img { width:20px; height:20px; border-radius:4px; object-fit:cover; }
     .game-filter.active { border-color:var(--accent); color:var(--text); }
     .game-filter.active img { outline:1px solid var(--accent); border-radius:4px; }
-    #viewBar { display:none; gap:6px; padding:8px 32px; background:var(--bg); border-bottom:1px solid var(--border); align-items:center; }
-    #viewBar.visible { display:flex; }
     .view-btn { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:5px 14px; color:var(--muted); font-family:'Bebas Neue',sans-serif; font-size:13px; letter-spacing:.05em; cursor:pointer; transition:all .15s; }
     .view-btn.active { background:var(--accent); border-color:var(--accent); color:var(--bg); }
     .view-btn[data-view="organized"].active { background:var(--accent2); border-color:var(--accent2); }
@@ -76,7 +77,6 @@
     #timelineYearsRow { display:flex; position:relative; height:14px; }
     .tl-year-label { position:absolute; transform:translateX(-50%); font-family:'DM Mono',monospace; font-size:10px; color:var(--muted); pointer-events:none; transition:color .15s; }
     .tl-year-label.in-range { color:var(--accent); }
-    #map { flex:1; min-height:500px; background:var(--map-bg); }
     #map { flex:1; min-height:500px; background:var(--map-bg); }
     .leaflet-tile { filter:var(--map-filter); }
     .leaflet-control-zoom a { background:var(--surface)!important; color:var(--text)!important; border-color:var(--border)!important; }
@@ -138,12 +138,12 @@
   <div class="stat"><span class="stat-value" id="statAdmin">0</span><span class="stat-label">Tournois organisés</span></div>
 </div>
 
-<div id="viewBar">
+<div id="filterBar">
   <button class="view-btn active" data-view="all"></button>
   <button class="view-btn" data-view="played"></button>
   <button class="view-btn" data-view="organized"></button>
+  <div class="filter-separator" id="filterSeparator" style="display:none"></div>
 </div>
-<div id="filterBar"></div>
 <div id="map"></div>
 <div id="timelineBar">
   <div id="timelineTop">
@@ -163,7 +163,6 @@
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
-<script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
 <script>
 const BACKEND = "https://mapgg-backend-54300574783.europe-west1.run.app";
 
@@ -334,7 +333,6 @@ function renderMap({total,offline,adminOffline,tournaments},playerName) {
   showStatus(t.statusDone(playerName,offline),"info");
   buildFilterBar(tournaments);
   buildTimeline(tournaments);
-  document.getElementById("viewBar").classList.add("visible");
   document.querySelectorAll(".view-btn").forEach(b=>{
     b.textContent=tr()[b.dataset.view==="all"?"viewAll":b.dataset.view==="played"?"viewPlayed":"viewOrganized"];
     b.classList.toggle("active",b.dataset.view===currentView);
@@ -344,13 +342,16 @@ function renderMap({total,offline,adminOffline,tournaments},playerName) {
 }
 
 function buildFilterBar(tournaments) {
+  // Remove old game badges but keep view buttons and separator
+  document.querySelectorAll(".game-filter").forEach(el=>el.remove());
   const bar=document.getElementById("filterBar");
-  bar.innerHTML="";
+  const sep=document.getElementById("filterSeparator");
   const gameMap=new Map();
   for(const t of tournaments) for(const g of(t.userGames||[])) if(!gameMap.has(g.name)){
     const imgUrl=g.images?.find(i=>i.type==="profile")?.url||g.images?.[0]?.url||"";
     gameMap.set(g.name,imgUrl);
   }
+  sep.style.display=gameMap.size>0?"block":"none";
   for(const[name,imgUrl]of gameMap.entries()) {
     const badge=document.createElement("div");
     badge.className="game-filter active"; badge.dataset.game=name;
@@ -362,7 +363,7 @@ function buildFilterBar(tournaments) {
     });
     bar.appendChild(badge);
   }
-  if(gameMap.size>0) bar.classList.add("visible");
+  bar.classList.add("visible");
 }
 
 function applyFilters() {
@@ -388,6 +389,7 @@ function applyFilters() {
   });
   clusterGroup.addLayers(filtered);
   map.addLayer(clusterGroup);
+
 }
 
 
@@ -544,7 +546,10 @@ document.querySelectorAll(".lang-btn").forEach(b=>b.addEventListener("click",()=
 document.querySelectorAll(".view-btn").forEach(b=>b.addEventListener("click",()=>{
   currentView=b.dataset.view;
   document.querySelectorAll(".view-btn").forEach(x=>x.classList.toggle("active",x.dataset.view===currentView));
-  document.getElementById("filterBar").style.display=currentView==="organized"?"none":"";
+  // Masque les filtres de jeux (et séparateur) si vue organisés
+  const hide=currentView==="organized";
+  document.querySelectorAll(".game-filter").forEach(el=>el.style.display=hide?"none":"");
+  document.getElementById("filterSeparator").style.display=hide?"none":"block";
   applyFilters();
 }));
 
