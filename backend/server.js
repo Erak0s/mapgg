@@ -141,7 +141,7 @@ app.get("/api/tournaments/:userId", async (req, res) => {
       totalPages = t.pageInfo.totalPages;
       allTournaments = allTournaments.concat(t.nodes || []);
       page++;
-      if (page > 10) break;
+      await new Promise(r => setTimeout(r, 200));
     }
 
     // 2. Récupère tous les events de l'utilisateur
@@ -163,7 +163,7 @@ app.get("/api/tournaments/:userId", async (req, res) => {
         }
       }
       page++;
-      if (page > 20) break;
+      await new Promise(r => setTimeout(r, 200));
     }
 
     // 3. Filtre offline + associe les jeux
@@ -185,7 +185,7 @@ app.get("/api/tournaments/:userId", async (req, res) => {
       totalPages = t.pageInfo.totalPages;
       adminTournaments = adminTournaments.concat(t.nodes || []);
       page++;
-      if (page > 10) break;
+      await new Promise(r => setTimeout(r, 200));
     }
 
     const adminOffline = adminTournaments
