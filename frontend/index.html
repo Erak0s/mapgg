@@ -4,682 +4,349 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>map.gg — Tournament Map</title>
-
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
-
   <style>
-    /* ============================================================
-       🎨 THÈME — modifie uniquement ce bloc pour changer l'aspect
-       ============================================================ */
     :root {
-      --bg:        #0a0a0f;
-      --surface:   #111118;
-      --border:    #1e1e2e;
-      --text:      #e8e8f0;
-      --muted:     #6b6b82;
-      --accent:    #20DF96;
-      --accent2:   #DF2069;
-      --danger:    #ff4747;
-      --kofi:      #ff5e5b;
+      --bg: #0a0a0f; --surface: #111118; --border: #1e1e2e;
+      --text: #e8e8f0; --muted: #6b6b82;
+      --accent: #20DF96; --accent2: #DF2069; --danger: #ff4747; --kofi: #ff5e5b;
       --map-filter: brightness(.72) saturate(.55) hue-rotate(195deg);
-      --map-bg:    #0a0a0f;
-      --radius:    6px;
-      --shadow-sm:  0 4px 16px rgba(0, 0, 0, .5);
-      --shadow-md:  0 8px 32px rgba(0, 0, 0, .6);
-      --glow-accent: 0 0 8px var(--accent);
-      --glow-accent-lg: 0 0 12px var(--accent);
+      --map-bg: #0a0a0f; --radius: 6px;
+      --shadow-sm: 0 4px 16px rgba(0,0,0,.5); --shadow-md: 0 8px 32px rgba(0,0,0,.6);
+      --glow-accent: 0 0 8px var(--accent); --glow-accent-lg: 0 0 12px var(--accent);
     }
-    /* ============================================================ */
-
     * { box-sizing: border-box; margin: 0; padding: 0; }
-
-    body {
-      background: var(--bg);
-      color: var(--text);
-      font-family: 'DM Sans', sans-serif;
-      min-height: 100vh;
-      display: flex;
-      flex-direction: column;
-    }
-
-    header {
-      padding: 24px 32px 20px;
-      border-bottom: 1px solid var(--border);
-      display: flex;
-      align-items: center;
-      gap: 24px;
-      flex-wrap: wrap;
-    }
-
-    .logo {
-      font-family: 'Bebas Neue', sans-serif;
-      font-size: 28px;
-      letter-spacing: 2px;
-      color: var(--accent);
-      flex-shrink: 0;
-    }
-    .logo span { color: var(--muted); }
-
-    .search-row {
-      display: flex;
-      gap: 10px;
-      flex: 1;
-      min-width: 260px;
-      max-width: 480px;
-    }
-
-    input[type="text"] {
-      flex: 1;
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 10px 14px;
-      color: var(--text);
-      font-family: 'DM Mono', monospace;
-      font-size: 14px;
-      outline: none;
-      transition: border-color .2s;
-    }
-    input[type="text"]::placeholder { color: var(--muted); }
-    input[type="text"]:focus { border-color: var(--accent); }
-
-    button#searchBtn {
-      background: var(--accent);
-      color: var(--bg);
-      border: none;
-      border-radius: var(--radius);
-      padding: 10px 20px;
-      font-family: 'Bebas Neue', sans-serif;
-      font-size: 16px;
-      letter-spacing: 1px;
-      cursor: pointer;
-      transition: opacity .15s, transform .1s;
-      flex-shrink: 0;
-    }
-    button#searchBtn:hover { opacity: .88; }
-    button#searchBtn:active { transform: scale(.97); }
-    button#searchBtn:disabled { opacity: .4; cursor: not-allowed; }
-
-    #playerCard {
-      display: none;
-      align-items: center;
-      gap: 14px;
-      flex-shrink: 0;
-    }
-    #playerCard.visible { display: flex; }
-
-    #playerAvatar {
-      width: 40px; height: 40px;
-      border-radius: 50%;
-      object-fit: cover;
-      border: 2px solid var(--accent);
-    }
-    #playerName {
-      font-family: 'Bebas Neue', sans-serif;
-      font-size: 20px;
-      color: var(--accent);
-    }
-
-    /* ── Lang toggle ── */
-    #langToggle {
-      display: flex;
-      align-items: center;
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 20px;
-      padding: 3px;
-      gap: 0;
-      flex-shrink: 0;
-    }
-    .lang-btn {
-      background: transparent;
-      border: none;
-      border-radius: 16px;
-      padding: 5px 12px;
-      color: var(--muted);
-      font-family: 'Bebas Neue', sans-serif;
-      font-size: 14px;
-      cursor: pointer;
-      transition: background .2s, color .2s;
-    }
-    .lang-btn.active {
-      background: var(--accent);
-      color: var(--bg);
-    }
-
-    /* ── Ko-fi button ── */
-    .kofi-btn {
-      margin-left: auto;
-      display: flex;
-      align-items: center;
-      gap: 7px;
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 8px 14px;
-      color: var(--kofi);
-      font-family: 'DM Sans', sans-serif;
-      font-size: 13px;
-      font-weight: 500;
-      text-decoration: none;
-      flex-shrink: 0;
-      transition: background .15s, border-color .15s, color .15s;
-    }
-    .kofi-btn:hover {
-      background: var(--kofi);
-      border-color: var(--kofi);
-      color: var(--bg);
-    }
-    .kofi-btn svg { flex-shrink: 0; }
-
-    #statsBar {
-      display: none;
-      gap: 24px;
-      padding: 12px 32px;
-      background: var(--surface);
-      border-bottom: 1px solid var(--border);
-      flex-wrap: wrap;
-    }
-    #statsBar.visible { display: flex; }
-
-    .stat { display: flex; align-items: baseline; gap: 8px; }
-    .stat-value {
-      font-family: 'Bebas Neue', sans-serif;
-      font-size: 24px;
-      color: var(--accent2);
-    }
-    .stat-label {
-      font-size: 12px;
-      color: var(--muted);
-      text-transform: uppercase;
-      letter-spacing: .08em;
-    }
-
-    #filterBar {
-      display: none;
-      gap: 10px;
-      padding: 10px 32px;
-      background: var(--bg);
-      border-bottom: 1px solid var(--border);
-      flex-wrap: wrap;
-      align-items: center;
-    }
-    #filterBar.visible { display: flex; }
-
-    .game-filter {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 20px;
-      padding: 5px 12px 5px 6px;
-      cursor: pointer;
-      font-size: 12px;
-      font-family: 'DM Mono', monospace;
-      color: var(--muted);
-      transition: all .15s;
-      user-select: none;
-    }
-    .game-filter img { width: 20px; height: 20px; border-radius: 4px; object-fit: cover; }
-    .game-filter.active { border-color: var(--accent); color: var(--text); }
-    .game-filter.active img { outline: 1px solid var(--accent); border-radius: 4px; }
-
-    #map { flex: 1; min-height: 500px; background: var(--map-bg); }
-
-    .leaflet-tile { filter: var(--map-filter); }
-    .leaflet-control-zoom a {
-      background: var(--surface) !important;
-      color: var(--text) !important;
-      border-color: var(--border) !important;
-    }
-    .leaflet-control-attribution {
-      background: var(--bg) !important;
-      color: var(--muted) !important;
-      font-size: 10px;
-      opacity: .7;
-    }
-    .leaflet-control-attribution a { color: var(--muted) !important; }
-
-    .leaflet-tooltip {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      color: var(--text);
-      font-family: 'DM Mono', monospace;
-      font-size: 11px;
-      padding: 6px 10px;
-      box-shadow: var(--shadow-sm);
-    }
-    .leaflet-tooltip-top::before { border-top-color: var(--border); }
-
-    .t-marker {
-      width: 12px; height: 12px;
-      border-radius: 50%;
-      background: var(--accent);
-      border: 2px solid var(--bg);
-      box-shadow: var(--glow-accent);
-      transition: transform .15s;
-    }
-    .t-marker:hover { transform: scale(1.4); }
-
-    .cluster-bubble {
-      background: var(--accent);
-      color: var(--bg);
-      border-radius: 50%;
-      font-family: 'Bebas Neue', sans-serif;
-      font-size: 14px;
-      display: flex; align-items: center; justify-content: center;
-      border: 2px solid var(--bg);
-      box-shadow: var(--glow-accent-lg);
-    }
-
-    .leaflet-popup-content-wrapper {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      color: var(--text);
-      box-shadow: var(--shadow-md);
-      min-width: 200px;
-    }
-    .leaflet-popup-tip { background: var(--surface); }
-    .leaflet-popup-content { margin: 14px 16px; }
-
-    .popup-title {
-      font-family: 'Bebas Neue', sans-serif;
-      font-size: 17px;
-      color: var(--accent);
-      margin-bottom: 6px;
-      line-height: 1.2;
-    }
-    .popup-meta { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--muted); margin-top: 3px; }
-    .popup-game {
-      display: inline-block;
-      margin-top: 8px;
-      background: var(--border);
-      border-radius: 4px;
-      padding: 2px 8px;
-      font-size: 11px;
-      color: var(--accent2);
-    }
-    .popup-link {
-      display: block;
-      margin-top: 10px;
-      font-size: 11px;
-      color: var(--accent);
-      text-decoration: none;
-      font-family: 'DM Mono', monospace;
-    }
-    .popup-link:hover { text-decoration: underline; }
-
-    #status {
-      display: none;
-      position: fixed;
-      bottom: 24px; left: 50%;
-      transform: translateX(-50%);
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 12px 20px;
-      font-size: 13px;
-      font-family: 'DM Mono', monospace;
-      color: var(--text);
-      z-index: 9999;
-      max-width: 90vw;
-      text-align: center;
-      box-shadow: var(--shadow-md);
-    }
-    #status.error { border-color: var(--danger); color: var(--danger); }
-    #status.visible { display: block; }
-
-    .spinner {
-      display: inline-block;
-      width: 14px; height: 14px;
-      border: 2px solid var(--border);
-      border-top-color: var(--accent);
-      border-radius: 50%;
-      animation: spin .7s linear infinite;
-      vertical-align: middle;
-      margin-right: 8px;
-    }
-    @keyframes spin { to { transform: rotate(360deg); } }
+    body { background: var(--bg); color: var(--text); font-family: 'DM Sans',sans-serif; min-height:100vh; display:flex; flex-direction:column; }
+    header { padding:24px 32px 20px; border-bottom:1px solid var(--border); display:flex; align-items:center; gap:24px; flex-wrap:wrap; }
+    .logo { font-family:'Bebas Neue',sans-serif; font-size:28px; letter-spacing:2px; color:var(--accent); flex-shrink:0; }
+    .logo span { color:var(--muted); }
+    .search-row { display:flex; gap:10px; flex:1; min-width:260px; max-width:480px; }
+    input[type="text"] { flex:1; background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:10px 14px; color:var(--text); font-family:'DM Mono',monospace; font-size:14px; outline:none; transition:border-color .2s; }
+    input[type="text"]::placeholder { color:var(--muted); }
+    input[type="text"]:focus { border-color:var(--accent); }
+    button#searchBtn { background:var(--accent); color:var(--bg); border:none; border-radius:var(--radius); padding:10px 20px; font-family:'Bebas Neue',sans-serif; font-size:16px; letter-spacing:1px; cursor:pointer; transition:opacity .15s,transform .1s; flex-shrink:0; }
+    button#searchBtn:hover { opacity:.88; }
+    button#searchBtn:active { transform:scale(.97); }
+    button#searchBtn:disabled { opacity:.4; cursor:not-allowed; }
+    #playerCard { display:none; align-items:center; gap:14px; flex-shrink:0; }
+    #playerCard.visible { display:flex; }
+    #playerAvatar { width:40px; height:40px; border-radius:50%; object-fit:cover; border:2px solid var(--accent); }
+    #playerName { font-family:'Bebas Neue',sans-serif; font-size:20px; color:var(--accent); }
+    #langToggle { display:flex; align-items:center; background:var(--surface); border:1px solid var(--border); border-radius:20px; padding:3px; gap:0; flex-shrink:0; }
+    .lang-btn { background:transparent; border:none; border-radius:16px; padding:5px 12px; color:var(--muted); font-family:'Bebas Neue',sans-serif; font-size:14px; cursor:pointer; transition:background .2s,color .2s; }
+    .lang-btn.active { background:var(--accent); color:var(--bg); }
+    #statsBar { display:none; gap:24px; padding:12px 32px; background:var(--surface); border-bottom:1px solid var(--border); flex-wrap:wrap; }
+    #statsBar.visible { display:flex; }
+    .stat { display:flex; align-items:baseline; gap:8px; }
+    .stat-value { font-family:'Bebas Neue',sans-serif; font-size:24px; color:var(--accent2); }
+    .stat-label { font-size:12px; color:var(--muted); text-transform:uppercase; letter-spacing:.08em; }
+    #filterBar { display:none; gap:10px; padding:10px 32px; background:var(--bg); border-bottom:1px solid var(--border); flex-wrap:wrap; align-items:center; }
+    #filterBar.visible { display:flex; }
+    .game-filter { display:flex; align-items:center; gap:6px; background:var(--surface); border:1px solid var(--border); border-radius:20px; padding:5px 12px 5px 6px; cursor:pointer; font-size:12px; font-family:'DM Mono',monospace; color:var(--muted); transition:all .15s; user-select:none; }
+    .game-filter img { width:20px; height:20px; border-radius:4px; object-fit:cover; }
+    .game-filter.active { border-color:var(--accent); color:var(--text); }
+    .game-filter.active img { outline:1px solid var(--accent); border-radius:4px; }
+    .admin-filter { padding:5px 12px; }
+    .admin-filter.active { border-color:var(--accent2); color:var(--accent2); }
+    #viewBar { display:none; gap:6px; padding:8px 32px; background:var(--bg); border-bottom:1px solid var(--border); align-items:center; }
+    #viewBar.visible { display:flex; }
+    .view-btn { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:5px 14px; color:var(--muted); font-family:'Bebas Neue',sans-serif; font-size:13px; letter-spacing:.05em; cursor:pointer; transition:all .15s; }
+    .view-btn.active { background:var(--accent); border-color:var(--accent); color:var(--bg); }
+    .view-btn[data-view="organized"].active { background:var(--accent2); border-color:var(--accent2); }
+    #map { flex:1; min-height:500px; background:var(--map-bg); }
+    .leaflet-tile { filter:var(--map-filter); }
+    .leaflet-control-zoom a { background:var(--surface)!important; color:var(--text)!important; border-color:var(--border)!important; }
+    .leaflet-control-attribution { background:var(--bg)!important; color:var(--muted)!important; font-size:10px; opacity:.7; }
+    .leaflet-control-attribution a { color:var(--muted)!important; }
+    .leaflet-tooltip { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); color:var(--text); font-family:'DM Mono',monospace; font-size:11px; padding:6px 10px; box-shadow:var(--shadow-sm); }
+    .leaflet-tooltip-top::before { border-top-color:var(--border); }
+    .t-marker { width:12px; height:12px; border-radius:50%; background:var(--accent); border:2px solid var(--bg); box-shadow:var(--glow-accent); transition:transform .15s; }
+    .t-marker:hover { transform:scale(1.4); }
+    .t-marker-admin { width:12px; height:12px; border-radius:50%; background:var(--accent2); border:2px solid var(--bg); box-shadow:0 0 8px var(--accent2); transition:transform .15s; }
+    .t-marker-admin:hover { transform:scale(1.4); }
+    .cluster-bubble { background:var(--accent); color:var(--bg); border-radius:50%; font-family:'Bebas Neue',sans-serif; font-size:14px; display:flex; align-items:center; justify-content:center; border:2px solid var(--bg); box-shadow:var(--glow-accent-lg); }
+    .leaflet-popup-content-wrapper { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); color:var(--text); box-shadow:var(--shadow-md); min-width:200px; }
+    .leaflet-popup-tip { background:var(--surface); }
+    .leaflet-popup-content { margin:14px 16px; }
+    .popup-title { font-family:'Bebas Neue',sans-serif; font-size:17px; color:var(--accent); margin-bottom:6px; line-height:1.2; }
+    .popup-title.admin { color:var(--accent2); }
+    .popup-meta { font-family:'DM Mono',monospace; font-size:11px; color:var(--muted); margin-top:3px; }
+    .popup-game { display:inline-block; margin-top:8px; background:var(--border); border-radius:4px; padding:2px 8px; font-size:11px; color:var(--accent2); }
+    .popup-admin-badge { display:inline-block; margin-top:8px; background:var(--accent2); color:var(--bg); border-radius:4px; padding:2px 8px; font-size:11px; font-family:'DM Mono',monospace; }
+    .popup-link { display:block; margin-top:10px; font-size:11px; color:var(--accent); text-decoration:none; font-family:'DM Mono',monospace; }
+    .popup-link:hover { text-decoration:underline; }
+    #status { display:none; position:fixed; bottom:24px; left:50%; transform:translateX(-50%); background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:12px 20px; font-size:13px; font-family:'DM Mono',monospace; color:var(--text); z-index:9999; max-width:90vw; text-align:center; box-shadow:var(--shadow-md); }
+    #status.error { border-color:var(--danger); color:var(--danger); }
+    #status.visible { display:block; }
+    .spinner { display:inline-block; width:14px; height:14px; border:2px solid var(--border); border-top-color:var(--accent); border-radius:50%; animation:spin .7s linear infinite; vertical-align:middle; margin-right:8px; }
+    @keyframes spin { to { transform:rotate(360deg); } }
   </style>
 </head>
 <body>
-
 <header>
   <div class="logo">MAP<span>.</span>GG</div>
-
   <div class="search-row">
-    <input type="text" id="slugInput"
-           placeholder="ID start.gg (ex: user/abc123 ou abc123)"
-           autocomplete="off" spellcheck="false" />
+    <input type="text" id="slugInput" placeholder="ID start.gg (ex: user/abc123 ou abc123)" autocomplete="off" spellcheck="false" />
     <button id="searchBtn">Chercher</button>
   </div>
-
   <div id="playerCard">
     <img id="playerAvatar" src="" alt="avatar" />
     <div id="playerName"></div>
   </div>
-
   <div id="langToggle">
     <button class="lang-btn active" data-lang="fr">FR</button>
     <button class="lang-btn" data-lang="en">EN</button>
   </div>
-
-  <!-- <a class="kofi-btn" href="https://ko-fi.com/TONPSEUDO" target="_blank" rel="noopener">
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
-      <path d="M23.881 8.948c-.773-4.085-4.859-4.593-4.859-4.593H.723c-.604 0-.679.798-.679.798s-.082 7.324-.022 11.822c.164 2.424 2.586 2.672 2.586 2.672s8.267-.023 11.966-.049c2.438-.426 2.683-2.566 2.658-3.734 4.352.24 7.422-2.831 6.649-6.916zm-11.062 3.511c-1.246 1.453-4.011 3.976-4.011 3.976s-.121.119-.31.023c-.076-.057-.108-.09-.108-.09-.443-.441-3.368-3.049-4.034-3.954-.709-.965-1.041-2.7-.091-3.71.951-1.01 3.005-1.086 4.363.407 0 0 1.565-1.782 3.468-.963 1.904.82 1.832 3.011.723 4.311zm6.173.478c-.928.116-1.682.028-1.682.028V7.284h1.77s1.971.551 1.971 2.638c0 1.913-.985 2.667-2.059 3.015z"/>
-    </svg>
-    Soutenir
-  </a> -->
 </header>
 
 <div id="statsBar">
-  <div class="stat">
-    <span class="stat-value" id="statTotal">0</span>
-    <span class="stat-label">Tournois totaux</span>
-  </div>
-  <div class="stat">
-    <span class="stat-value" id="statOffline">0</span>
-    <span class="stat-label">Tournois offline affichés</span>
-  </div>
-  <div class="stat">
-    <span class="stat-value" id="statCountries">0</span>
-    <span class="stat-label">Pays visités</span>
-  </div>
-  <div class="stat">
-    <span class="stat-value" id="statGames">0</span>
-    <span class="stat-label">Jeux joués</span>
-  </div>
+  <div class="stat"><span class="stat-value" id="statTotal">0</span><span class="stat-label">Tournois totaux</span></div>
+  <div class="stat"><span class="stat-value" id="statOffline">0</span><span class="stat-label">Tournois offline affichés</span></div>
+  <div class="stat"><span class="stat-value" id="statCountries">0</span><span class="stat-label">Pays visités</span></div>
+  <div class="stat"><span class="stat-value" id="statGames">0</span><span class="stat-label">Jeux joués</span></div>
+  <div class="stat"><span class="stat-value" id="statAdmin">0</span><span class="stat-label">Tournois organisés</span></div>
 </div>
 
+<div id="viewBar">
+  <button class="view-btn active" data-view="all"></button>
+  <button class="view-btn" data-view="played"></button>
+  <button class="view-btn" data-view="organized"></button>
+</div>
 <div id="filterBar"></div>
 <div id="map"></div>
 <div id="status"></div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
-
 <script>
-const BACKEND = "https://mapgg-backend-54300574783.europe-west1.run.app";
+const BACKEND = "http://localhost:3001";
 
-// ── Traductions ───────────────────────────────────────────────────────────
 const TRANSLATIONS = {
   fr: {
-    placeholder:      "ID start.gg (ex: user/abc123 ou abc123)",
-    searchBtn:        "Chercher",
-    statTotal1:       "Tournoi total",       statTotalN:      "Tournois totaux",
-    statOffline1:     "Tournoi offline affiché", statOfflineN: "Tournois offline affichés",
-    statCountries1:   "Pays visité",         statCountriesN:  "Pays visités",
-    statGames1:       "Jeu joué",            statGamesN:      "Jeux joués",
-    loading1:         "Recherche du joueur…",
-    loading2:         "Chargement des tournois…",
-    errNotFound:      "Joueur introuvable",
-    errServer:        "Erreur serveur",
-    popupDateUnknown: "Date inconnue",
-    popupLink:        "↗ Voir sur start.gg",
-    clusterLabel:     (n) => `${n} tournois`,
-    statusDone:       (name, n) => `✅ Carte de ${name} chargée — ${n} tournoi${n > 1 ? "s" : ""} affiché${n > 1 ? "s" : ""}`,
-    locale:           "fr-FR",
+    placeholder:"ID start.gg (ex: user/abc123 ou abc123)", searchBtn:"Chercher",
+    statTotal1:"Tournoi total", statTotalN:"Tournois totaux",
+    statOffline1:"Tournoi offline affiché", statOfflineN:"Tournois offline affichés",
+    statCountries1:"Pays visité", statCountriesN:"Pays visités",
+    statGames1:"Jeu joué", statGamesN:"Jeux joués",
+    statAdmin1:"Tournoi organisé", statAdminN:"Tournois organisés",
+    loading1:"Recherche du joueur…", loading2:"Chargement des tournois…",
+    errNotFound:"Joueur introuvable", errServer:"Erreur serveur",
+    popupDateUnknown:"Date inconnue", popupLink:"↗ Voir sur start.gg",
+    popupAdmin:"🏆 Organisateur", adminFilter:"🏆 Organisateur",
+    clusterLabel:(n)=>`${n} tournois`,
+    statusDone:(name,n)=>`✅ Carte de ${name} chargée — ${n} tournoi${n>1?"s":""} affiché${n>1?"s":""}`,
+    locale:"fr-FR",
+    viewAll:"Tout", viewPlayed:"Joués", viewOrganized:"Organisés",
   },
   en: {
-    placeholder:      "start.gg ID (ex: user/abc123 or abc123)",
-    searchBtn:        "Search",
-    statTotal1:       "Tournament",          statTotalN:      "Tournaments",
-    statOffline1:     "Offline tournament",  statOfflineN:    "Offline tournaments",
-    statCountries1:   "Country visited",     statCountriesN:  "Countries visited",
-    statGames1:       "Game played",         statGamesN:      "Games played",
-    loading1:         "Looking up player…",
-    loading2:         "Loading tournaments…",
-    errNotFound:      "Player not found",
-    errServer:        "Server error",
-    popupDateUnknown: "Unknown date",
-    popupLink:        "↗ View on start.gg",
-    clusterLabel:     (n) => `${n} tournament${n > 1 ? "s" : ""}`,
-    statusDone:       (name, n) => `✅ ${name}'s map loaded — ${n} tournament${n > 1 ? "s" : ""} displayed`,
-    locale:           "en-GB",
+    placeholder:"start.gg ID (ex: user/abc123 or abc123)", searchBtn:"Search",
+    statTotal1:"Tournament", statTotalN:"Tournaments",
+    statOffline1:"Offline tournament", statOfflineN:"Offline tournaments",
+    statCountries1:"Country visited", statCountriesN:"Countries visited",
+    statGames1:"Game played", statGamesN:"Games played",
+    statAdmin1:"Organized tournament", statAdminN:"Organized tournaments",
+    loading1:"Looking up player…", loading2:"Loading tournaments…",
+    errNotFound:"Player not found", errServer:"Server error",
+    popupDateUnknown:"Unknown date", popupLink:"↗ View on start.gg",
+    popupAdmin:"🏆 Organizer", adminFilter:"🏆 Organizer",
+    clusterLabel:(n)=>`${n} tournament${n>1?"s":""}`,
+    statusDone:(name,n)=>`✅ ${name}'s map loaded — ${n} tournament${n>1?"s":""} displayed`,
+    locale:"en-GB",
+    viewAll:"All", viewPlayed:"Played", viewOrganized:"Organized",
   }
 };
 
-let lang = "fr";
-const tr = () => TRANSLATIONS[lang];
+let lang="fr";
+const tr=()=>TRANSLATIONS[lang];
 
 function applyLang() {
-  document.getElementById("slugInput").placeholder = tr().placeholder;
-  document.getElementById("searchBtn").textContent = tr().searchBtn;
-  document.querySelectorAll(".lang-btn").forEach(b => {
-    b.classList.toggle("active", b.dataset.lang === lang);
+  document.getElementById("slugInput").placeholder=tr().placeholder;
+  document.getElementById("searchBtn").textContent=tr().searchBtn;
+  document.querySelectorAll(".lang-btn").forEach(b=>b.classList.toggle("active",b.dataset.lang===lang));
+
+  // Met à jour les stats si elles sont visibles
+  if(document.getElementById("statsBar").classList.contains("visible")) {
+    const t=tr();
+    const total=+document.getElementById("statTotal").textContent;
+    const offline=+document.getElementById("statOffline").textContent;
+    const countries=+document.getElementById("statCountries").textContent;
+    const games=+document.getElementById("statGames").textContent;
+    const admin=+document.getElementById("statAdmin").textContent;
+    document.querySelector("#statTotal + .stat-label").textContent=total<=1?t.statTotal1:t.statTotalN;
+    document.querySelector("#statOffline + .stat-label").textContent=offline<=1?t.statOffline1:t.statOfflineN;
+    document.querySelector("#statCountries + .stat-label").textContent=countries<=1?t.statCountries1:t.statCountriesN;
+    document.querySelector("#statGames + .stat-label").textContent=games<=1?t.statGames1:t.statGamesN;
+    document.querySelector("#statAdmin + .stat-label").textContent=admin<=1?t.statAdmin1:t.statAdminN;
+  }
+
+  // Met à jour les boutons de vue si visibles
+  document.querySelectorAll(".view-btn").forEach(b=>{
+    b.textContent=tr()[b.dataset.view==="all"?"viewAll":b.dataset.view==="played"?"viewPlayed":"viewOrganized"];
   });
 }
 
-// ── Map init ──────────────────────────────────────────────────────────────
-const map = L.map("map", { center: [20, 0], zoom: 2, zoomControl: true });
-
-L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
-  attribution: '© <a href="https://www.openstreetmap.org/">OpenStreetMap</a> © <a href="https://carto.com/">CARTO</a>',
-  maxZoom: 19,
+const map=L.map("map",{center:[20,0],zoom:2,zoomControl:true});
+L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",{
+  attribution:'© <a href="https://www.openstreetmap.org/">OpenStreetMap</a> © <a href="https://carto.com/">CARTO</a>',maxZoom:19
 }).addTo(map);
 
-let clusterGroup = null;
-let allMarkers   = [];
-let activeGames  = new Set();
+let clusterGroup=null, allMarkers=[], activeGames=new Set(), currentView="all";
 
-// ── Status helper ─────────────────────────────────────────────────────────
-function showStatus(msg, type = "info") {
-  const el = document.getElementById("status");
-  el.className = "visible" + (type === "error" ? " error" : "");
-  el.innerHTML = type === "loading" ? `<span class="spinner"></span>${msg}` : msg;
-  if (type !== "loading") setTimeout(() => el.classList.remove("visible"), 4000);
+function showStatus(msg,type="info") {
+  const el=document.getElementById("status");
+  el.className="visible"+(type==="error"?" error":"");
+  el.innerHTML=type==="loading"?`<span class="spinner"></span>${msg}`:msg;
+  if(type!=="loading") setTimeout(()=>el.classList.remove("visible"),4000);
 }
 
-// ── Custom marker icon ────────────────────────────────────────────────────
-function makeIcon(count = 1) {
-  if (count === 1) {
-    return L.divIcon({ className: "", html: '<div class="t-marker"></div>', iconSize: [12, 12], iconAnchor: [6, 6] });
+function makeIcon(count=1,isAdmin=false) {
+  if(count===1) {
+    const cls=isAdmin?"t-marker-admin":"t-marker";
+    return L.divIcon({className:"",html:`<div class="${cls}"></div>`,iconSize:[12,12],iconAnchor:[6,6]});
   }
-  const size = count < 10 ? 32 : count < 50 ? 38 : 44;
-  return L.divIcon({
-    className: "",
-    html: `<div class="cluster-bubble" style="width:${size}px;height:${size}px">${count}</div>`,
-    iconSize: [size, size],
-    iconAnchor: [size / 2, size / 2],
-  });
+  const size=count<10?32:count<50?38:44;
+  return L.divIcon({className:"",html:`<div class="cluster-bubble" style="width:${size}px;height:${size}px">${count}</div>`,iconSize:[size,size],iconAnchor:[size/2,size/2]});
 }
 
-// ── Search ────────────────────────────────────────────────────────────────
 async function search() {
-  const slug = document.getElementById("slugInput").value.trim();
-  if (!slug) return;
-
-  document.getElementById("searchBtn").disabled = true;
-  showStatus(tr().loading1, "loading");
-
+  const slug=document.getElementById("slugInput").value.trim();
+  if(!slug) return;
+  document.getElementById("searchBtn").disabled=true;
+  showStatus(tr().loading1,"loading");
   try {
-    const userRes = await fetch(`${BACKEND}/api/player/${encodeURIComponent(slug)}`);
-    const user = await userRes.json();
-    if (!userRes.ok) throw new Error(tr().errNotFound);
-    const avatar = user.images?.find(i => i.type === "profile")?.url || "";
-    document.getElementById("playerAvatar").src = avatar;
-    document.getElementById("playerName").textContent = user.displayName;
+    const userRes=await fetch(`${BACKEND}/api/player/${encodeURIComponent(slug)}`);
+    const user=await userRes.json();
+    if(!userRes.ok) throw new Error(tr().errNotFound);
+    document.getElementById("playerAvatar").src=user.images?.find(i=>i.type==="profile")?.url||"";
+    document.getElementById("playerName").textContent=user.displayName;
     document.getElementById("playerCard").classList.add("visible");
-
-    showStatus(tr().loading2, "loading");
-
-    const tRes = await fetch(`${BACKEND}/api/tournaments/${user.id}`);
-    const tData = await tRes.json();
-    if (!tRes.ok) throw new Error(tData.error || tr().errServer);
-
-    renderMap(tData, user.displayName);
-
-  } catch (e) {
-    showStatus(e.message, "error");
+    showStatus(tr().loading2,"loading");
+    const tRes=await fetch(`${BACKEND}/api/tournaments/${user.id}`);
+    const tData=await tRes.json();
+    if(!tRes.ok) throw new Error(tData.error||tr().errServer);
+    renderMap(tData,user.displayName);
+  } catch(e) {
+    showStatus(e.message,"error");
   } finally {
-    document.getElementById("searchBtn").disabled = false;
+    document.getElementById("searchBtn").disabled=false;
   }
 }
 
-// ── Render map ────────────────────────────────────────────────────────────
-function renderMap({ total, offline, tournaments }, playerName) {
-  if (clusterGroup) map.removeLayer(clusterGroup);
-  allMarkers  = [];
-  activeGames = new Set();
+function renderMap({total,offline,adminOffline,tournaments},playerName) {
+  if(clusterGroup) map.removeLayer(clusterGroup);
+  allMarkers=[]; activeGames=new Set();
+  const t=tr(), countries=new Set();
 
-  const t = tr();
-  const countries = new Set();
-
-  for (const tournament of tournaments) {
-    if (tournament.countryCode) countries.add(tournament.countryCode);
-
-    const date = tournament.startAt
-      ? new Date(tournament.startAt * 1000).toLocaleDateString(t.locale, { year: "numeric", month: "short", day: "numeric" })
-      : t.popupDateUnknown;
-
-    const games = tournament.userGames || [];
-    games.forEach(g => activeGames.add(g.name));
-
-    const gameTag = games.length
-      ? games.slice(0, 2).map(g => `<span class="popup-game">${g.name}</span>`).join(" ")
-      : "";
-    const img    = tournament.images?.find(i => i.type === "profile")?.url;
-    const imgTag = img ? `<img src="${img}" style="width:100%;border-radius:4px;margin-bottom:8px;object-fit:cover;max-height:80px" />` : "";
-    const location = [tournament.city, tournament.countryCode].filter(Boolean).join(", ");
-
-    const popup = `
-      ${imgTag}
-      <div class="popup-title">${tournament.name}</div>
-      <div class="popup-meta">📅 ${date}</div>
-      <div class="popup-meta">📍 ${location}</div>
-      ${gameTag}
-      <a class="popup-link" href="https://www.start.gg/${tournament.slug}" target="_blank" rel="noopener">${t.popupLink}</a>
-    `;
-
-    const marker = L.marker([tournament.lat, tournament.lng], {
-      icon: makeIcon(1),
-      tooltipCity: location,
-      gameNames: games.map(g => g.name),
+  for(const tournament of tournaments) {
+    if(tournament.countryCode) countries.add(tournament.countryCode);
+    const date=tournament.startAt
+      ?new Date(tournament.startAt*1000).toLocaleDateString(t.locale,{year:"numeric",month:"short",day:"numeric"})
+      :t.popupDateUnknown;
+    const games=tournament.userGames||[];
+    games.forEach(g=>activeGames.add(g.name));
+    if(tournament.isAdmin) activeGames.add("__admin__");
+    const gameTag=games.length?games.slice(0,2).map(g=>`<span class="popup-game">${g.name}</span>`).join(" "):"";
+    const adminBadge=tournament.isAdmin?`<span class="popup-admin-badge">${t.popupAdmin}</span>`:"";
+    const img=tournament.images?.find(i=>i.type==="profile")?.url;
+    const imgTag=img?`<img src="${img}" style="width:100%;border-radius:4px;margin-bottom:8px;object-fit:cover;max-height:80px" />`:"";
+    const location=[tournament.city,tournament.countryCode].filter(Boolean).join(", ");
+    const popup=`${imgTag}<div class="popup-title${tournament.isAdmin?" admin":""}">${tournament.name}</div><div class="popup-meta">📅 ${date}</div><div class="popup-meta">📍 ${location}</div>${adminBadge}${gameTag}<a class="popup-link" href="https://www.start.gg/${tournament.slug}" target="_blank" rel="noopener">${t.popupLink}</a>`;
+    const marker=L.marker([tournament.lat,tournament.lng],{
+      icon:makeIcon(1,tournament.isAdmin&&!games.length),
+      tooltipCity:location, gameNames:games.map(g=>g.name),
+      isAdmin:tournament.isAdmin||false,
+      isPlayer:tournament.isPlayer||false,
     });
-    marker.bindPopup(popup, { maxWidth: 260 });
-    marker.bindTooltip(`<b>${tournament.name}</b><br><span style="color:var(--muted);font-size:10px">${location}</span>`, {
-      direction: "top", offset: [0, -8], opacity: 1
-    });
+    marker.bindPopup(popup,{maxWidth:260});
+    marker.bindTooltip(`<b>${tournament.name}</b><br><span style="color:var(--muted);font-size:10px">${location}</span>`,{direction:"top",offset:[0,-8],opacity:1});
     allMarkers.push(marker);
   }
 
-  // Stats
-  document.getElementById("statTotal").textContent     = total;
-  document.getElementById("statOffline").textContent   = offline;
-  document.getElementById("statCountries").textContent = countries.size;
-  document.getElementById("statGames").textContent     = activeGames.size;
-  document.querySelector("#statTotal + .stat-label").textContent     = total <= 1          ? t.statTotal1     : t.statTotalN;
-  document.querySelector("#statOffline + .stat-label").textContent   = offline <= 1        ? t.statOffline1   : t.statOfflineN;
-  document.querySelector("#statCountries + .stat-label").textContent = countries.size <= 1 ? t.statCountries1 : t.statCountriesN;
-  document.querySelector("#statGames + .stat-label").textContent     = activeGames.size <= 1 ? t.statGames1   : t.statGamesN;
+  const adminCount=adminOffline||0;
+  const gameCount=[...activeGames].filter(g=>g!=="__admin__").length;
+  document.getElementById("statTotal").textContent=total;
+  document.getElementById("statOffline").textContent=offline;
+  document.getElementById("statCountries").textContent=countries.size;
+  document.getElementById("statGames").textContent=gameCount;
+  document.getElementById("statAdmin").textContent=adminCount;
+  document.querySelector("#statTotal + .stat-label").textContent=total<=1?t.statTotal1:t.statTotalN;
+  document.querySelector("#statOffline + .stat-label").textContent=offline<=1?t.statOffline1:t.statOfflineN;
+  document.querySelector("#statCountries + .stat-label").textContent=countries.size<=1?t.statCountries1:t.statCountriesN;
+  document.querySelector("#statGames + .stat-label").textContent=gameCount<=1?t.statGames1:t.statGamesN;
+  document.querySelector("#statAdmin + .stat-label").textContent=adminCount<=1?t.statAdmin1:t.statAdminN;
   document.getElementById("statsBar").classList.add("visible");
-
-  showStatus(t.statusDone(playerName, offline), "info");
-
+  showStatus(t.statusDone(playerName,offline),"info");
   buildFilterBar(tournaments);
+  const vb=document.getElementById("viewBar");
+  vb.classList.add("visible");
+  document.querySelectorAll(".view-btn").forEach(b=>{
+    b.textContent=tr()[b.dataset.view==="all"?"viewAll":b.dataset.view==="played"?"viewPlayed":"viewOrganized"];
+    b.classList.toggle("active",b.dataset.view===currentView);
+  });
   applyFilters();
-
-  if (allMarkers.length > 0) {
-    setTimeout(() => {
-      if (clusterGroup) {
-        const bounds = clusterGroup.getBounds();
-        if (bounds.isValid()) map.fitBounds(bounds, { padding: [40, 40], maxZoom: 8 });
-      }
-    }, 100);
-  }
+  if(allMarkers.length>0) setTimeout(()=>{if(clusterGroup){const b=clusterGroup.getBounds();if(b.isValid())map.fitBounds(b,{padding:[40,40],maxZoom:8});}},100);
 }
 
-// ── Filter bar ────────────────────────────────────────────────────────────
 function buildFilterBar(tournaments) {
-  const bar = document.getElementById("filterBar");
-  bar.innerHTML = "";
-
-  const gameMap = new Map();
-  for (const t of tournaments) {
-    for (const g of (t.userGames || [])) {
-      if (!gameMap.has(g.name)) {
-        const imgUrl = g.images?.find(i => i.type === "profile")?.url || g.images?.[0]?.url || "";
-        gameMap.set(g.name, imgUrl);
-      }
-    }
+  const bar=document.getElementById("filterBar");
+  bar.innerHTML="";
+  const gameMap=new Map();
+  for(const t of tournaments) for(const g of(t.userGames||[])) if(!gameMap.has(g.name)){
+    const imgUrl=g.images?.find(i=>i.type==="profile")?.url||g.images?.[0]?.url||"";
+    gameMap.set(g.name,imgUrl);
   }
-
-  if (gameMap.size === 0) return;
-
-  for (const [name, imgUrl] of gameMap.entries()) {
-    const badge = document.createElement("div");
-    badge.className = "game-filter active";
-    badge.dataset.game = name;
-    badge.innerHTML = imgUrl ? `<img src="${imgUrl}" alt="${name}" />${name}` : name;
-    badge.addEventListener("click", () => {
-      if (activeGames.has(name)) {
-        activeGames.delete(name);
-        badge.classList.remove("active");
-      } else {
-        activeGames.add(name);
-        badge.classList.add("active");
-      }
+  for(const[name,imgUrl]of gameMap.entries()) {
+    const badge=document.createElement("div");
+    badge.className="game-filter active"; badge.dataset.game=name;
+    badge.innerHTML=imgUrl?`<img src="${imgUrl}" alt="${name}" />${name}`:name;
+    badge.addEventListener("click",()=>{
+      if(activeGames.has(name)){activeGames.delete(name);badge.classList.remove("active");}
+      else{activeGames.add(name);badge.classList.add("active");}
       applyFilters();
     });
     bar.appendChild(badge);
   }
-
-  bar.classList.add("visible");
+  if(gameMap.size>0) bar.classList.add("visible");
 }
 
-// ── Apply filters ─────────────────────────────────────────────────────────
 function applyFilters() {
-  if (clusterGroup) map.removeLayer(clusterGroup);
-
-  clusterGroup = L.markerClusterGroup({
-    iconCreateFunction: (cluster) => makeIcon(cluster.getChildCount()),
-    maxClusterRadius: 40,
-    spiderfyOnMaxZoom: true,
-    showCoverageOnHover: false,
+  if(clusterGroup) map.removeLayer(clusterGroup);
+  clusterGroup=L.markerClusterGroup({iconCreateFunction:(c)=>makeIcon(c.getChildCount()),maxClusterRadius:40,spiderfyOnMaxZoom:true,showCoverageOnHover:false});
+  clusterGroup.on("clustermouseover",e=>{
+    const cities=[...new Set(e.layer.getAllChildMarkers().map(m=>m.options.tooltipCity).filter(Boolean))];
+    const label=cities.length<=2?cities.join(" · "):`${cities[0]} · ${cities[1]} +${cities.length-2}`;
+    const count=e.layer.getChildCount();
+    e.layer.bindTooltip(`<b>${tr().clusterLabel(count)}</b><br><span style="color:var(--muted);font-size:10px">${label}</span>`,{direction:"top",offset:[0,-8],opacity:1,permanent:false}).openTooltip();
   });
-
-  clusterGroup.on("clustermouseover", e => {
-    const cities = [...new Set(
-      e.layer.getAllChildMarkers().map(m => m.options.tooltipCity).filter(Boolean)
-    )];
-    const label = cities.length <= 2
-      ? cities.join(" · ")
-      : `${cities[0]} · ${cities[1]} +${cities.length - 2}`;
-    const count = e.layer.getChildCount();
-    e.layer.bindTooltip(`<b>${tr().clusterLabel(count)}</b><br><span style="color:var(--muted);font-size:10px">${label}</span>`, {
-      direction: "top", offset: [0, -8], opacity: 1, permanent: false
-    }).openTooltip();
+  clusterGroup.on("clustermouseout",e=>e.layer.unbindTooltip());
+  const filtered=allMarkers.filter(m=>{
+    const games=m.options.gameNames||[];
+    const isAdmin=m.options.isAdmin||false;
+    const isPlayer=m.options.isPlayer||false;
+    if(currentView==="organized") return isAdmin;
+    if(currentView==="played") { if(!isPlayer) return false; return games.some(g=>activeGames.has(g)); }
+    // "all"
+    if(isAdmin&&games.length===0) return true;
+    if(games.length===0) return false;
+    return games.some(g=>activeGames.has(g));
   });
-  clusterGroup.on("clustermouseout", e => e.layer.unbindTooltip());
-
-  const filtered = allMarkers.filter(m => {
-    const games = m.options.gameNames || [];
-    if (games.length === 0) return false;
-    return games.some(g => activeGames.has(g));
-  });
-
   clusterGroup.addLayers(filtered);
   map.addLayer(clusterGroup);
 }
 
-// ── Events ────────────────────────────────────────────────────────────────
-document.getElementById("searchBtn").addEventListener("click", search);
-document.getElementById("slugInput").addEventListener("keydown", e => {
-  if (e.key === "Enter") search();
-});
-document.querySelectorAll(".lang-btn").forEach(b => {
-  b.addEventListener("click", () => {
-    lang = b.dataset.lang;
-    applyLang();
-  });
-});
+document.getElementById("searchBtn").addEventListener("click",search);
+document.getElementById("slugInput").addEventListener("keydown",e=>{if(e.key==="Enter")search();});
+document.querySelectorAll(".lang-btn").forEach(b=>b.addEventListener("click",()=>{lang=b.dataset.lang;applyLang();}));
+document.querySelectorAll(".view-btn").forEach(b=>b.addEventListener("click",()=>{
+  currentView=b.dataset.view;
+  document.querySelectorAll(".view-btn").forEach(x=>x.classList.toggle("active",x.dataset.view===currentView));
+  document.getElementById("filterBar").style.display=currentView==="organized"?"none":"";
+  applyFilters();
+}));
 </script>
 </body>
 </html>
