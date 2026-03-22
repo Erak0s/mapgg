@@ -41,10 +41,6 @@
     #shareBtn.visible { display:flex; }
     #shareBtn:hover { border-color:var(--accent); color:var(--accent); }
     #shareBtn.copied { border-color:var(--accent); color:var(--accent); }
-    #heatmapBtn { display:none; align-items:center; gap:6px; background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:7px 12px; color:var(--muted); font-family:'DM Mono',monospace; font-size:12px; cursor:pointer; transition:all .15s; flex-shrink:0; }
-    #heatmapBtn.visible { display:flex; }
-    #heatmapBtn:hover { border-color:var(--accent); color:var(--accent); }
-    #heatmapBtn.active { border-color:var(--accent); color:var(--accent); background:rgba(32,223,150,.08); }
     #langToggle { display:flex; align-items:center; background:var(--surface); border:1px solid var(--border); border-radius:20px; padding:3px; gap:0; flex-shrink:0; margin-left:auto; }
     .lang-btn { background:transparent; border:none; border-radius:16px; padding:5px 12px; color:var(--muted); font-family:'Bebas Neue',sans-serif; font-size:14px; cursor:pointer; transition:background .2s,color .2s; }
     .lang-btn.active { background:var(--accent); color:var(--bg); }
@@ -127,12 +123,6 @@
       <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/>
     </svg>
     <span id="shareBtnLabel">Partager</span>
-  </button>
-  <button id="heatmapBtn">
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-      <circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/>
-    </svg>
-    <span id="heatmapBtnLabel">Heatmap</span>
   </button>
   <div id="langToggle">
     <button class="lang-btn active" data-lang="fr">FR</button>
@@ -245,7 +235,7 @@ L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",{
   attribution:'© <a href="https://www.openstreetmap.org/">OpenStreetMap</a> © <a href="https://carto.com/">CARTO</a>',maxZoom:19
 }).addTo(map);
 
-let clusterGroup=null, allMarkers=[], activeGames=new Set(), currentView="all", heatLayer=null, heatmapActive=false, yearStart=null, yearEnd=null;
+let clusterGroup=null, allMarkers=[], activeGames=new Set(), currentView="all", yearStart=null, yearEnd=null;
 
 function showStatus(msg,type="info") {
   const el=document.getElementById("status");
@@ -288,7 +278,6 @@ async function search(slugOverride) {
 
     // Affiche le bouton de partage
     document.getElementById("shareBtn").classList.add("visible");
-    document.getElementById("heatmapBtn").classList.add("visible");
 
     renderMap(tData,user.displayName);
   } catch(e) {
@@ -399,8 +388,6 @@ function applyFilters() {
   });
   clusterGroup.addLayers(filtered);
   map.addLayer(clusterGroup);
-  // Si heatmap active, la reconstruire avec les nouveaux filtres
-  if(heatmapActive) enableHeatmap();
 }
 
 
@@ -548,48 +535,6 @@ document.getElementById("shareBtn").addEventListener("click",()=>{
     label.textContent=tr().shareCopied;
     setTimeout(()=>{btn.classList.remove("copied");label.textContent=tr().share;},2000);
   });
-});
-
-// ── Heatmap ───────────────────────────────────────────────────────────────
-function buildHeatPoints() {
-  return allMarkers
-    .filter(m=>{
-      const games=m.options.gameNames||[];
-      const isAdmin=m.options.isAdmin||false;
-      const isPlayer=m.options.isPlayer||false;
-      if(currentView==="organized") return isAdmin;
-      if(currentView==="played"){if(!isPlayer)return false;return games.some(g=>activeGames.has(g));}
-      if(isAdmin&&games.length===0) return true;
-      if(games.length===0) return false;
-      return games.some(g=>activeGames.has(g));
-    })
-    .map(m=>[m.getLatLng().lat, m.getLatLng().lng, 1]);
-}
-
-function enableHeatmap() {
-  if(clusterGroup) map.removeLayer(clusterGroup);
-  if(heatLayer) map.removeLayer(heatLayer);
-  const points=buildHeatPoints();
-  heatLayer=L.heatLayer(points,{
-    radius:35, blur:25, maxZoom:8,
-    gradient:{0.2:"#20DF96", 0.5:"#ffdd00", 0.8:"#ff8800", 1.0:"#DF2069"}
-  }).addTo(map);
-}
-
-function disableHeatmap() {
-  if(heatLayer){map.removeLayer(heatLayer);heatLayer=null;}
-  applyFilters();
-}
-
-document.getElementById("heatmapBtn").addEventListener("click",()=>{
-  heatmapActive=!heatmapActive;
-  const btn=document.getElementById("heatmapBtn");
-  btn.classList.toggle("active",heatmapActive);
-  // Masque/affiche les barres de filtre qui n'ont pas de sens en heatmap
-  document.getElementById("filterBar").style.visibility=heatmapActive?"hidden":"";
-  document.getElementById("viewBar").style.visibility=heatmapActive?"hidden":"";
-  document.getElementById("timelineBar").style.visibility=heatmapActive?"hidden":"visible";
-  if(heatmapActive) enableHeatmap(); else disableHeatmap();
 });
 
 // ── Events ────────────────────────────────────────────────────────────────
