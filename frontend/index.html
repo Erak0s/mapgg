@@ -234,7 +234,7 @@ L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",{
   attribution:'© <a href="https://www.openstreetmap.org/">OpenStreetMap</a> © <a href="https://carto.com/">CARTO</a>',maxZoom:19
 }).addTo(map);
 
-let clusterGroup=null, allMarkers=[], activeGames=new Set(), currentView="all", yearStart=null, yearEnd=null;
+let clusterGroup=null, allMarkers=[], activeGames=new Set(), currentView="all", yearStart=null, yearEnd=null, totalTournaments=0;
 
 function showStatus(msg,type="info") {
   const el=document.getElementById("status");
@@ -319,16 +319,9 @@ function renderMap({total,offline,adminOffline,tournaments},playerName) {
 
   const adminCount=adminOffline||0;
   const gameCount=[...activeGames].filter(g=>g!=="__admin__").length;
+  totalTournaments=total;
   document.getElementById("statTotal").textContent=total;
-  document.getElementById("statOffline").textContent=offline;
-  document.getElementById("statCountries").textContent=countries.size;
-  document.getElementById("statGames").textContent=gameCount;
-  document.getElementById("statAdmin").textContent=adminCount;
   document.querySelector("#statTotal + .stat-label").textContent=total<=1?t.statTotal1:t.statTotalN;
-  document.querySelector("#statOffline + .stat-label").textContent=offline<=1?t.statOffline1:t.statOfflineN;
-  document.querySelector("#statCountries + .stat-label").textContent=countries.size<=1?t.statCountries1:t.statCountriesN;
-  document.querySelector("#statGames + .stat-label").textContent=gameCount<=1?t.statGames1:t.statGamesN;
-  document.querySelector("#statAdmin + .stat-label").textContent=adminCount<=1?t.statAdmin1:t.statAdminN;
   document.getElementById("statsBar").classList.add("visible");
   showStatus(t.statusDone(playerName,offline),"info");
   buildFilterBar(tournaments);
@@ -390,6 +383,26 @@ function applyFilters() {
   clusterGroup.addLayers(filtered);
   map.addLayer(clusterGroup);
 
+  // Recalcul des stats selon les filtres actifs
+  const t=tr();
+  const visibleCountries=new Set(filtered.map(m=>{
+    const city=m.options.tooltipCity||"";
+    const parts=city.split(", ");
+    return parts[parts.length-1];
+  }).filter(Boolean));
+  const visibleGames=new Set(filtered.flatMap(m=>m.options.gameNames||[]));
+  const visibleAdmin=filtered.filter(m=>m.options.isAdmin).length;
+  const offlineCount=filtered.length;
+  const gameCount=visibleGames.size;
+
+  document.getElementById("statOffline").textContent=offlineCount;
+  document.getElementById("statCountries").textContent=visibleCountries.size;
+  document.getElementById("statGames").textContent=gameCount;
+  document.getElementById("statAdmin").textContent=visibleAdmin;
+  document.querySelector("#statOffline + .stat-label").textContent=offlineCount<=1?t.statOffline1:t.statOfflineN;
+  document.querySelector("#statCountries + .stat-label").textContent=visibleCountries.size<=1?t.statCountries1:t.statCountriesN;
+  document.querySelector("#statGames + .stat-label").textContent=gameCount<=1?t.statGames1:t.statGamesN;
+  document.querySelector("#statAdmin + .stat-label").textContent=visibleAdmin<=1?t.statAdmin1:t.statAdminN;
 }
 
 
