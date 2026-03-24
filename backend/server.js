@@ -31,7 +31,6 @@ async function graphql(query, variables = {}) {
   return json.data;
 }
 
-// Récupère l'userId depuis le slug (ex: "user/abc123" ou juste "abc123")
 const GET_USER = `
   query GetUser($slug: String!) {
     user(slug: $slug) {
@@ -44,14 +43,13 @@ const GET_USER = `
   }
 `;
 
-// Récupère tous les tournois d'un utilisateur avec pagination
 const GET_TOURNAMENTS = `
   query GetUserTournaments($userId: ID!, $page: Int!) {
     user(id: $userId) {
       tournaments(query: {
         page: $page
-        perPage: 50
-        filter: { past: true }
+        perPage: 500
+        filter: { }
       }) {
         pageInfo { total totalPages }
         nodes {
@@ -97,6 +95,36 @@ const GET_ADMIN_TOURNAMENTS = `
   }
 `;
 
+const GET_TOURNAMENT_PARTICIPANTS = `
+  query GetTournamentParticipants($slug: String!, $page: Int!) {
+    tournament(slug: $slug) {
+      id
+      name
+      slug
+      startAt
+      city
+      countryCode
+      lat
+      lng
+      images { url type }
+      participants(query: { page: $page, perPage: 500 }) {
+        pageInfo { total totalPages }
+        nodes {
+          user {
+            name
+            player { gamerTag }
+            location {
+              city
+              country
+              countryId
+            }
+          }
+        }
+      }
+    }
+  }
+`;
+
 const GET_USER_EVENTS = `
   query GetUserEvents($userId: ID!, $page: Int!) {
     user(id: $userId) {
@@ -114,6 +142,26 @@ const GET_USER_EVENTS = `
   }
 `;
 
+const geocodeCache = new Map();
+async function geocodeCity(city, country) {
+  const key = `${city}||${country}`;
+  if (geocodeCache.has(key)) return geocodeCache.get(key);
+  try {
+    const q = encodeURIComponent(`${city}, ${country}`);
+    const r = await fetch(`https://nominatim.openstreetmap.org/search?q=${q}&format=json&limit=1`, {
+      headers: { "User-Agent": "mapgg/1.0" }
+    });
+    const json = await r.json();
+    if (json[0]) {
+      const coords = { lat: parseFloat(json[0].lat), lng: parseFloat(json[0].lon) };
+      geocodeCache.set(key, coords);
+      return coords;
+    }
+  } catch {}
+  geocodeCache.set(key, null);
+  return null;
+}
+
 app.get("/api/player/:slug", async (req, res) => {
   try {
     const slug = req.params.slug;
@@ -130,7 +178,6 @@ app.get("/api/tournaments/:userId", async (req, res) => {
   try {
     const userId = req.params.userId;
 
-    // 1. Récupère tous les tournois
     let allTournaments = [];
     let page = 1;
     let totalPages = 1;
@@ -144,7 +191,6 @@ app.get("/api/tournaments/:userId", async (req, res) => {
       await new Promise(r => setTimeout(r, 200));
     }
 
-    // 2. Récupère tous les events de l'utilisateur
     const eventsByTournament = new Map();
     page = 1;
     totalPages = 1;
@@ -166,7 +212,6 @@ app.get("/api/tournaments/:userId", async (req, res) => {
       await new Promise(r => setTimeout(r, 200));
     }
 
-    // 3. Filtre offline + associe les jeux
     const offline = allTournaments
       .filter(t => !t.isOnline && t.lat != null && t.lng != null)
       .map(t => {
@@ -174,7 +219,6 @@ app.get("/api/tournaments/:userId", async (req, res) => {
         return t;
       });
 
-    // 3. Récupère les tournois organisés
     let adminTournaments = [];
     page = 1;
     totalPages = 1;
@@ -192,7 +236,6 @@ app.get("/api/tournaments/:userId", async (req, res) => {
       .filter(t => !t.isOnline && t.lat != null && t.lng != null)
       .map(t => ({ ...t, isAdmin: true, userGames: [] }));
 
-    // Fusionne en évitant les doublons (tournoi joué ET organisé)
     const adminIds = new Set(adminOffline.map(t => t.id));
     const mergedTournaments = [
       ...offline.map(t => ({ ...t, isAdmin: adminIds.has(t.id), isPlayer: true })),
@@ -205,6 +248,73 @@ app.get("/api/tournaments/:userId", async (req, res) => {
       adminOffline: adminOffline.length,
       tournaments: mergedTournaments,
     });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get("/api/tournament/:slug", async (req, res) => {
+  try {
+    const slug = req.params.slug;
+    let page = 1;
+    let totalPages = 1;
+    let tournamentInfo = null;
+    const locationMap = new Map();
+
+    while (page <= totalPages) {
+      const data = await graphql(GET_TOURNAMENT_PARTICIPANTS, { slug, page });
+      const t = data.tournament;
+      if (!t) return res.status(404).json({ error: "Tournoi introuvable" });
+
+      if (!tournamentInfo) {
+        tournamentInfo = {
+          id: t.id,
+          name: t.name,
+          slug: t.slug,
+          startAt: t.startAt,
+          city: t.city,
+          countryCode: t.countryCode,
+          lat: t.lat,
+          lng: t.lng,
+          images: t.images,
+          total: t.participants.pageInfo.total,
+        };
+      }
+
+      totalPages = t.participants.pageInfo.totalPages;
+
+      for (const p of (t.participants.nodes || [])) {
+        const loc = p.user?.location;
+        if (!loc?.city || !loc?.country) continue;
+        const key = `${loc.city}||${loc.country}||${loc.countryId || ""}`;
+        if (!locationMap.has(key)) {
+          locationMap.set(key, {
+            city: loc.city,
+            country: loc.country,
+            countryId: loc.countryId || "",
+            count: 0,
+            names: [],
+          });
+        }
+        const entry = locationMap.get(key);
+        entry.count++;
+        const tag = p.user?.player?.gamerTag || p.user?.name;
+        if (tag) entry.names.push(tag);
+      }
+
+      page++;
+      await new Promise(r => setTimeout(r, 200));
+    }
+
+    const rawLocations = [...locationMap.values()];
+    const locations = await Promise.all(
+      rawLocations.map(async (loc) => {
+        const coords = await geocodeCity(loc.city, loc.country);
+        return coords ? { ...loc, lat: coords.lat, lng: coords.lng } : null;
+      })
+    );
+    const validLocations = locations.filter(Boolean);
+    res.json({ tournament: tournamentInfo, locations: validLocations });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

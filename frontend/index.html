@@ -25,6 +25,9 @@
     header { padding:24px 32px 20px; border-bottom:1px solid var(--border); display:flex; align-items:center; gap:24px; flex-wrap:wrap; }
     .logo { font-family:'Bebas Neue',sans-serif; font-size:28px; letter-spacing:2px; color:var(--accent); flex-shrink:0; }
     .logo span { color:var(--muted); }
+    #modeToggle { display:flex; align-items:center; background:var(--surface); border:1px solid var(--border); border-radius:20px; padding:3px; gap:0; flex-shrink:0; }
+    .mode-btn { background:transparent; border:none; border-radius:16px; padding:5px 10px; color:var(--muted); font-size:14px; cursor:pointer; transition:background .2s,color .2s; }
+    .mode-btn.active { background:var(--accent); color:var(--bg); }
     .search-row { display:flex; gap:10px; flex:1; min-width:260px; max-width:480px; }
     input[type="text"] { flex:1; background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:10px 14px; color:var(--text); font-family:'DM Mono',monospace; font-size:14px; outline:none; transition:border-color .2s; }
     input[type="text"]::placeholder { color:var(--muted); }
@@ -41,7 +44,6 @@
     #shareBtn.visible { display:flex; }
     #shareBtn:hover { border-color:var(--accent); color:var(--accent); }
     #shareBtn.copied { border-color:var(--accent); color:var(--accent); }
-
     #langToggle { display:flex; align-items:center; background:var(--surface); border:1px solid var(--border); border-radius:20px; padding:3px; gap:0; flex-shrink:0; margin-left:auto; }
     .lang-btn { background:transparent; border:none; border-radius:16px; padding:5px 12px; color:var(--muted); font-family:'Bebas Neue',sans-serif; font-size:14px; cursor:pointer; transition:background .2s,color .2s; }
     .lang-btn.active { background:var(--accent); color:var(--bg); }
@@ -61,6 +63,9 @@
     .view-btn { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:5px 14px; color:var(--muted); font-family:'Bebas Neue',sans-serif; font-size:13px; letter-spacing:.05em; cursor:pointer; transition:all .15s; }
     .view-btn.active { background:var(--accent); border-color:var(--accent); color:var(--bg); }
     .view-btn[data-view="organized"].active { background:var(--accent2); border-color:var(--accent2); }
+    /* ── Participant marker ── */
+    .p-marker { border-radius:50%; background:var(--accent2); border:2px solid var(--bg); box-shadow:0 0 8px var(--accent2); display:flex; align-items:center; justify-content:center; font-family:'Bebas Neue',sans-serif; color:var(--bg); transition:transform .15s; }
+    .p-marker:hover { transform:scale(1.2); }
     /* ── Timeline ── */
     #timelineBar { display:none; position:fixed; bottom:0; left:0; right:0; z-index:1000; background:rgba(10,10,15,.95); border-top:1px solid var(--border); padding:12px 32px 14px; flex-direction:column; gap:6px; backdrop-filter:blur(8px); }
     #timelineBar.visible { display:flex; }
@@ -110,6 +115,10 @@
 <body>
 <header>
   <div class="logo">MAP<span>.</span>GG</div>
+  <div id="modeToggle">
+    <button class="mode-btn active" data-mode="player">👤</button>
+    <button class="mode-btn" data-mode="tournament">🏆</button>
+  </div>
   <div class="search-row">
     <input type="text" id="slugInput" placeholder="ID start.gg (ex: user/abc123 ou abc123)" autocomplete="off" spellcheck="false" />
     <button id="searchBtn">Chercher</button>
@@ -164,50 +173,70 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
 <script>
-const BACKEND = "https://mapgg-backend-54300574783.europe-west1.run.app";
+// const BACKEND = "https://mapgg-backend-54300574783.europe-west1.run.app";
+const BACKEND = "http://localhost:3001";
+  
 
 const TRANSLATIONS = {
   fr: {
-    placeholder:"ID start.gg (ex: user/abc123 ou abc123)", searchBtn:"Chercher",
+    placeholder:"ID start.gg (ex: user/abc123 ou abc123)",
+    placeholderTournament:"Slug du tournoi (ex: tournament/heir-5)",
+    searchBtn:"Chercher",
     statTotal1:"Tournoi total", statTotalN:"Tournois totaux",
     statOffline1:"Tournoi offline affiché", statOfflineN:"Tournois offline affichés",
     statCountries1:"Pays visité", statCountriesN:"Pays visités",
     statGames1:"Jeu joué", statGamesN:"Jeux joués",
     statAdmin1:"Tournoi organisé", statAdminN:"Tournois organisés",
+    statParticipants1:"Participant localisé", statParticipantsN:"Participants localisés",
+    statCities1:"Ville représentée", statCitiesN:"Villes représentées",
     loading1:"Recherche du joueur…", loading2:"Chargement des tournois…",
+    loadingTournament:"Chargement des participants…",
     errNotFound:"Joueur introuvable", errServer:"Erreur serveur",
+    errTournamentNotFound:"Tournoi introuvable",
     popupDateUnknown:"Date inconnue", popupLink:"↗ Voir sur start.gg",
     popupAdmin:"🏆 Organisateur",
     clusterLabel:(n)=>`${n} tournois`,
     statusDone:(name,n)=>`✅ Carte de ${name} chargée — ${n} tournoi${n>1?"s":""} affiché${n>1?"s":""}`,
+    statusTournamentDone:(name,n,t)=>`✅ ${name} — ${n} participants localisés sur ${t}`,
     locale:"fr-FR",
     viewAll:"Tout", viewPlayed:"Joués", viewOrganized:"Organisés",
     share:"Partager", shareCopied:"Lien copié !",
+    inscrits:"Inscrits",
   },
   en: {
-    placeholder:"start.gg ID (ex: user/abc123 or abc123)", searchBtn:"Search",
+    placeholder:"start.gg ID (ex: user/abc123 or abc123)",
+    placeholderTournament:"Tournament slug (ex: tournament/heir-5)",
+    searchBtn:"Search",
     statTotal1:"Tournament", statTotalN:"Tournaments",
     statOffline1:"Offline tournament", statOfflineN:"Offline tournaments",
     statCountries1:"Country visited", statCountriesN:"Countries visited",
     statGames1:"Game played", statGamesN:"Games played",
     statAdmin1:"Organized tournament", statAdminN:"Organized tournaments",
+    statParticipants1:"Located participant", statParticipantsN:"Located participants",
+    statCities1:"City represented", statCitiesN:"Cities represented",
     loading1:"Looking up player…", loading2:"Loading tournaments…",
+    loadingTournament:"Loading participants…",
     errNotFound:"Player not found", errServer:"Server error",
+    errTournamentNotFound:"Tournament not found",
     popupDateUnknown:"Unknown date", popupLink:"↗ View on start.gg",
     popupAdmin:"🏆 Organizer",
     clusterLabel:(n)=>`${n} tournament${n>1?"s":""}`,
     statusDone:(name,n)=>`✅ ${name}'s map loaded — ${n} tournament${n>1?"s":""} displayed`,
+    statusTournamentDone:(name,n,t)=>`✅ ${name} — ${n} located participant${n>1?"s":""} out of ${t}`,
     locale:"en-GB",
     viewAll:"All", viewPlayed:"Played", viewOrganized:"Organized",
     share:"Share", shareCopied:"Link copied!",
+    inscrits:"Registered",
   }
 };
 
 let lang="fr";
 const tr=()=>TRANSLATIONS[lang];
 
+let currentMode="player", tournamentCluster=null;
+
 function applyLang() {
-  document.getElementById("slugInput").placeholder=tr().placeholder;
+  document.getElementById("slugInput").placeholder=currentMode==="player"?tr().placeholder:tr().placeholderTournament;
   document.getElementById("searchBtn").textContent=tr().searchBtn;
   document.getElementById("shareBtnLabel").textContent=tr().share;
   document.querySelectorAll(".lang-btn").forEach(b=>b.classList.toggle("active",b.dataset.lang===lang));
@@ -252,9 +281,11 @@ function makeIcon(count=1,isAdmin=false) {
   return L.divIcon({className:"",html:`<div class="cluster-bubble" style="width:${size}px;height:${size}px">${count}</div>`,iconSize:[size,size],iconAnchor:[size/2,size/2]});
 }
 
+// ── Mode joueur ───────────────────────────────────────────────────────────
 async function search(slugOverride) {
   const slug=(slugOverride||document.getElementById("slugInput").value).trim();
   if(!slug) return;
+  if(currentMode==="tournament") { searchTournament(slug); return; }
   document.getElementById("slugInput").value=slug;
   document.getElementById("searchBtn").disabled=true;
   showStatus(tr().loading1,"loading");
@@ -269,15 +300,11 @@ async function search(slugOverride) {
     const tRes=await fetch(`${BACKEND}/api/tournaments/${user.id}`);
     const tData=await tRes.json();
     if(!tRes.ok) throw new Error(tData.error||tr().errServer);
-
-    // Met à jour l'URL sans recharger
     const url=new URL(window.location.href);
     url.searchParams.set("user",slug);
+    url.searchParams.delete("tournament");
     window.history.pushState({},"",url);
-
-    // Affiche le bouton de partage
     document.getElementById("shareBtn").classList.add("visible");
-
     renderMap(tData,user.displayName);
   } catch(e) {
     showStatus(e.message,"error");
@@ -288,6 +315,7 @@ async function search(slugOverride) {
 
 function renderMap({total,offline,adminOffline,tournaments},playerName) {
   if(clusterGroup) map.removeLayer(clusterGroup);
+  if(tournamentCluster){map.removeLayer(tournamentCluster);tournamentCluster=null;}
   allMarkers=[]; activeGames=new Set(); yearStart=null; yearEnd=null;
   const t=tr(), countries=new Set();
 
@@ -323,6 +351,7 @@ function renderMap({total,offline,adminOffline,tournaments},playerName) {
   document.getElementById("statTotal").textContent=total;
   document.querySelector("#statTotal + .stat-label").textContent=total<=1?t.statTotal1:t.statTotalN;
   document.getElementById("statsBar").classList.add("visible");
+  document.getElementById("filterBar").style.display="";
   showStatus(t.statusDone(playerName,offline),"info");
   buildFilterBar(tournaments);
   buildTimeline(tournaments);
@@ -334,8 +363,114 @@ function renderMap({total,offline,adminOffline,tournaments},playerName) {
   if(allMarkers.length>0) setTimeout(()=>{if(clusterGroup){const b=clusterGroup.getBounds();if(b.isValid())map.fitBounds(b,{padding:[40,40],maxZoom:8});}},100);
 }
 
+// ── Mode tournoi ──────────────────────────────────────────────────────────
+async function searchTournament(slug) {
+  const clean=slug
+    .replace(/^https?:\/\/(www\.)?start\.gg\//,"")
+    .replace(/\/details.*$/,"")
+    .replace(/\/events.*$/,"");
+  document.getElementById("slugInput").value=clean;
+  document.getElementById("searchBtn").disabled=true;
+  showStatus(tr().loadingTournament,"loading");
+  try {
+    const res=await fetch(`${BACKEND}/api/tournament/${encodeURIComponent(clean)}`);
+    const data=await res.json();
+    if(!res.ok) throw new Error(data.error||tr().errTournamentNotFound);
+
+    const img=data.tournament.images?.find(i=>i.type==="profile")?.url||"";
+    document.getElementById("playerAvatar").src=img;
+    document.getElementById("playerName").textContent=data.tournament.name;
+    document.getElementById("playerCard").classList.add("visible");
+
+    const url=new URL(window.location.href);
+    url.searchParams.set("tournament",clean);
+    url.searchParams.delete("user");
+    window.history.pushState({},"",url);
+    document.getElementById("shareBtn").classList.add("visible");
+
+    renderTournamentMap(data);
+  } catch(e) {
+    showStatus(e.message,"error");
+  } finally {
+    document.getElementById("searchBtn").disabled=false;
+  }
+}
+
+function renderTournamentMap({tournament,locations}) {
+  if(clusterGroup){map.removeLayer(clusterGroup);clusterGroup=null;}
+  if(tournamentCluster){map.removeLayer(tournamentCluster);tournamentCluster=null;}
+
+  tournamentCluster=L.markerClusterGroup({
+    iconCreateFunction: c=>{
+      const count=c.getChildCount();
+      const size=count<10?32:count<50?38:44;
+      return L.divIcon({
+        className:"",
+        html:`<div class="p-marker" style="width:${size}px;height:${size}px;font-size:${size<38?11:13}px">${count}</div>`,
+        iconSize:[size,size], iconAnchor:[size/2,size/2]
+      });
+    },
+    maxClusterRadius:60, spiderfyOnMaxZoom:true, showCoverageOnHover:false,
+  });
+
+  const t=tr();
+  let totalLocated=0;
+  const cities=new Set();
+  const countries=new Set();
+
+  for(const loc of locations) {
+    if(!loc.lat||!loc.lng) continue;
+    totalLocated+=loc.count;
+    cities.add(`${loc.city}||${loc.country}`);
+    countries.add(loc.country);
+
+    const marker=L.marker([loc.lat,loc.lng],{
+      icon:L.divIcon({
+        className:"",
+        html:`<div class="p-marker" style="width:28px;height:28px;font-size:11px">${loc.count}</div>`,
+        iconSize:[28,28], iconAnchor:[14,14]
+      })
+    });
+    marker.bindPopup(`
+      <div class="popup-title" style="color:var(--accent2)">${loc.city}</div>
+      <div class="popup-meta">${loc.country}</div>
+      <div class="popup-meta" style="margin-top:6px;color:var(--text)">${loc.count} participant${loc.count>1?"s":""}</div>
+    `);
+    marker.bindTooltip(`<b>${loc.city}</b><br><span style="color:var(--muted);font-size:10px">${loc.count} participant${loc.count>1?"s":""}</span>`,{direction:"top",offset:[0,-8],opacity:1});
+    tournamentCluster.addLayer(marker);
+  }
+
+  map.addLayer(tournamentCluster);
+
+  // Cache les éléments mode joueur
+  document.getElementById("filterBar").style.display="none";
+  document.getElementById("timelineBar").classList.remove("visible");
+  document.body.classList.remove("timeline-open");
+
+  // Stats tournoi
+  document.getElementById("statsBar").classList.add("visible");
+  document.getElementById("statTotal").textContent=tournament.total;
+  document.getElementById("statOffline").textContent=totalLocated;
+  document.getElementById("statCountries").textContent=countries.size;
+  document.getElementById("statGames").textContent=cities.size;
+  document.getElementById("statAdmin").textContent="";
+  document.querySelector("#statTotal + .stat-label").textContent=t.inscrits;
+  document.querySelector("#statOffline + .stat-label").textContent=totalLocated<=1?t.statParticipants1:t.statParticipantsN;
+  document.querySelector("#statCountries + .stat-label").textContent=countries.size<=1?t.statCountries1:t.statCountriesN;
+  document.querySelector("#statGames + .stat-label").textContent=cities.size<=1?t.statCities1:t.statCitiesN;
+  document.querySelector("#statAdmin + .stat-label").textContent="";
+
+  showStatus(t.statusTournamentDone(tournament.name,totalLocated,tournament.total),"info");
+
+  setTimeout(()=>{
+    if(tournamentCluster){
+      const b=tournamentCluster.getBounds();
+      if(b.isValid()) map.fitBounds(b,{padding:[40,40],maxZoom:8});
+    }
+  },100);
+}
+
 function buildFilterBar(tournaments) {
-  // Remove old game badges but keep view buttons and separator
   document.querySelectorAll(".game-filter").forEach(el=>el.remove());
   const bar=document.getElementById("filterBar");
   const sep=document.getElementById("filterSeparator");
@@ -383,7 +518,6 @@ function applyFilters() {
   clusterGroup.addLayers(filtered);
   map.addLayer(clusterGroup);
 
-  // Recalcul des stats selon les filtres actifs
   const t=tr();
   const visibleCountries=new Set(filtered.map(m=>{
     const city=m.options.tooltipCity||"";
@@ -404,7 +538,6 @@ function applyFilters() {
   document.querySelector("#statGames + .stat-label").textContent=gameCount<=1?t.statGames1:t.statGamesN;
   document.querySelector("#statAdmin + .stat-label").textContent=visibleAdmin<=1?t.statAdmin1:t.statAdminN;
 }
-
 
 // ── Timeline ──────────────────────────────────────────────────────────────
 function buildTimeline(tournaments) {
@@ -437,7 +570,6 @@ function buildTimeline(tournaments) {
     yearStart=isAll?null:allYears[idxL];
     yearEnd=isAll?null:allYears[idxR];
     rangeLabel.textContent=isAll?"—":allYears[idxL]===allYears[idxR]?allYears[idxL]:allYears[idxL]+" – "+allYears[idxR];
-    // Colorise les labels d'années
     yearsRow.querySelectorAll(".tl-year-label").forEach(el=>{
       const y=+el.dataset.year;
       el.classList.toggle("in-range",!isAll&&y>=allYears[idxL]&&y<=allYears[idxR]);
@@ -445,7 +577,6 @@ function buildTimeline(tournaments) {
     applyFilters();
   }
 
-  // Génère les labels d'années
   yearsRow.innerHTML="";
   allYears.forEach((y,i)=>{
     const el=document.createElement("span");
@@ -454,7 +585,6 @@ function buildTimeline(tournaments) {
     yearsRow.appendChild(el);
   });
 
-  // Drag helper
   function makeDraggable(el, onMove) {
     el.addEventListener("mousedown", e=>{
       e.preventDefault();
@@ -484,15 +614,9 @@ function buildTimeline(tournaments) {
 
   function snapIdx(ratio){ return Math.round(ratio*(allYears.length-1)); }
 
-  makeDraggable(thumbL, ratio=>{
-    const idx=snapIdx(ratio);
-    idxL=Math.min(idx,idxR);
-  });
-  makeDraggable(thumbR, ratio=>{
-    const idx=snapIdx(ratio);
-    idxR=Math.max(idx,idxL);
-  });
-  // Drag du milieu = déplacer la fenêtre
+  makeDraggable(thumbL, ratio=>{ idxL=Math.min(snapIdx(ratio),idxR); });
+  makeDraggable(thumbR, ratio=>{ idxR=Math.max(snapIdx(ratio),idxL); });
+
   let midStartRatio=null, midIdxL=null, midIdxR=null;
   thumbMid.addEventListener("mousedown", e=>{
     e.preventDefault();
@@ -523,17 +647,13 @@ function buildTimeline(tournaments) {
 }
 
 document.getElementById("timelineReset").addEventListener("click",()=>{
-  const thumbL=document.getElementById("tlThumbL");
-  const thumbR=document.getElementById("tlThumbR");
   yearStart=null; yearEnd=null;
-  // Re-snap to full range via rebuilding
   document.getElementById("timelineRange").textContent="—";
-  // Trigger a full reset by resetting idx vars — simplest: re-call applyFilters
   if(document.getElementById("timelineBar").classList.contains("visible")){
-    const wrap=document.getElementById("timelineTrackWrap");
-    const range2=document.getElementById("timelineRange2");
-    thumbL.style.left="0%"; thumbR.style.left="100%";
-    range2.style.left="0%"; range2.style.width="100%";
+    document.getElementById("tlThumbL").style.left="0%";
+    document.getElementById("tlThumbR").style.left="100%";
+    document.getElementById("timelineRange2").style.left="0%";
+    document.getElementById("timelineRange2").style.width="100%";
     document.getElementById("tlThumbMid").style.left="0%";
     document.getElementById("tlThumbMid").style.width="100%";
     document.querySelectorAll(".tl-year-label").forEach(el=>el.classList.remove("in-range"));
@@ -552,6 +672,22 @@ document.getElementById("shareBtn").addEventListener("click",()=>{
   });
 });
 
+// ── Mode toggle ───────────────────────────────────────────────────────────
+document.querySelectorAll(".mode-btn").forEach(b=>b.addEventListener("click",()=>{
+  currentMode=b.dataset.mode;
+  document.querySelectorAll(".mode-btn").forEach(x=>x.classList.toggle("active",x.dataset.mode===currentMode));
+  document.getElementById("slugInput").placeholder=currentMode==="player"?tr().placeholder:tr().placeholderTournament;
+  document.getElementById("slugInput").value="";
+  document.getElementById("playerCard").classList.remove("visible");
+  document.getElementById("statsBar").classList.remove("visible");
+  document.getElementById("shareBtn").classList.remove("visible");
+  document.getElementById("filterBar").style.display="";
+  document.getElementById("timelineBar").classList.remove("visible");
+  document.body.classList.remove("timeline-open");
+  if(clusterGroup){map.removeLayer(clusterGroup);clusterGroup=null;}
+  if(tournamentCluster){map.removeLayer(tournamentCluster);tournamentCluster=null;}
+}));
+
 // ── Events ────────────────────────────────────────────────────────────────
 document.getElementById("searchBtn").addEventListener("click",()=>search());
 document.getElementById("slugInput").addEventListener("keydown",e=>{if(e.key==="Enter")search();});
@@ -559,7 +695,6 @@ document.querySelectorAll(".lang-btn").forEach(b=>b.addEventListener("click",()=
 document.querySelectorAll(".view-btn").forEach(b=>b.addEventListener("click",()=>{
   currentView=b.dataset.view;
   document.querySelectorAll(".view-btn").forEach(x=>x.classList.toggle("active",x.dataset.view===currentView));
-  // Masque les filtres de jeux (et séparateur) si vue organisés
   const hide=currentView==="organized";
   document.querySelectorAll(".game-filter").forEach(el=>el.style.display=hide?"none":"");
   document.getElementById("filterSeparator").style.display=hide?"none":"block";
@@ -567,8 +702,17 @@ document.querySelectorAll(".view-btn").forEach(b=>b.addEventListener("click",()=
 }));
 
 // ── Chargement depuis l'URL ───────────────────────────────────────────────
-const userFromUrl=new URLSearchParams(window.location.search).get("user");
-if(userFromUrl) search(userFromUrl);
+const urlParams=new URLSearchParams(window.location.search);
+const userFromUrl=urlParams.get("user");
+const tournamentFromUrl=urlParams.get("tournament");
+if(tournamentFromUrl){
+  currentMode="tournament";
+  document.querySelectorAll(".mode-btn").forEach(b=>b.classList.toggle("active",b.dataset.mode==="tournament"));
+  document.getElementById("slugInput").placeholder=tr().placeholderTournament;
+  searchTournament(tournamentFromUrl);
+} else if(userFromUrl) {
+  search(userFromUrl);
+}
 </script>
 </body>
 </html>
