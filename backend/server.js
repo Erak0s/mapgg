@@ -1,5 +1,6 @@
 import express from "express";
 import cors from "cors";
+import Database from "better-sqlite3";
 
 const app = express();
 app.use(cors({
@@ -15,6 +16,47 @@ app.use(express.json());
 
 const STARTGG_API_KEY = "4084825f7edcee7e793552fbf5f46648";
 const STARTGG_ENDPOINT = "https://api.start.gg/gql/alpha";
+
+// ── Geocoding cache (SQLite) ──────────────────────────────────────────────
+const db = new Database("geocache.db");
+db.exec(`
+  CREATE TABLE IF NOT EXISTS geocache (
+    key     TEXT PRIMARY KEY,
+    lat     REAL,
+    lng     REAL
+  )
+`);
+const stmtGet = db.prepare("SELECT lat, lng FROM geocache WHERE key = ?");
+const stmtSet = db.prepare("INSERT OR REPLACE INTO geocache (key, lat, lng) VALUES (?, ?, ?)");
+
+async function geocodeCity(city, country) {
+  const key = `${city}||${country}`;
+
+  // 1. Check SQLite cache first (synchronous, instant)
+  const cached = stmtGet.get(key);
+  if (cached) return cached.lat !== null ? { lat: cached.lat, lng: cached.lng } : null;
+
+  // 2. Not in cache — call Nominatim
+  try {
+    const query = encodeURIComponent(`${city}, ${country}`);
+    const url = `https://nominatim.openstreetmap.org/search?q=${query}&format=json&limit=1`;
+    const res = await fetch(url, {
+      headers: { "User-Agent": "mapgg-tournament-map/1.0" }
+    });
+    const data = await res.json();
+    if (data && data[0]) {
+      const coords = { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
+      stmtSet.run(key, coords.lat, coords.lng);
+      return coords;
+    }
+  } catch (e) {
+    console.warn(`Geocode failed for ${city}, ${country}:`, e.message);
+  }
+
+  // Store null result to avoid re-querying unknown cities
+  stmtSet.run(key, null, null);
+  return null;
+}
 
 async function graphql(query, variables = {}) {
   const res = await fetch(STARTGG_ENDPOINT, {
@@ -286,7 +328,16 @@ app.get("/api/tournament/:slug", async (req, res) => {
       await new Promise(r => setTimeout(r, 200));
     }
 
-    const locations = [...locationMap.values()];
+    // ── Geocode all unique cities ─────────────────────────────────────────
+    const locations = [];
+    for (const loc of locationMap.values()) {
+      // Rate-limit Nominatim: 1 req/s
+      await new Promise(r => setTimeout(r, 1100));
+      const coords = await geocodeCity(loc.city, loc.country);
+      if (!coords) continue; // skip cities that couldn't be geocoded
+      locations.push({ ...loc, lat: coords.lat, lng: coords.lng });
+    }
+
     res.json({ tournament: tournamentInfo, locations });
   } catch (e) {
     res.status(500).json({ error: e.message });

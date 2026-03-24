@@ -104,6 +104,8 @@
     .popup-admin-badge { display:inline-block; margin-top:8px; background:var(--accent2); color:var(--bg); border-radius:4px; padding:2px 8px; font-size:11px; font-family:'DM Mono',monospace; }
     .popup-link { display:block; margin-top:10px; font-size:11px; color:var(--accent); text-decoration:none; font-family:'DM Mono',monospace; }
     .popup-link:hover { text-decoration:underline; }
+    .popup-names { margin-top:8px; font-family:'DM Mono',monospace; font-size:11px; color:var(--muted); line-height:1.6; max-height:120px; overflow-y:auto; }
+    .popup-names span { color:var(--text); }
     body.timeline-open #map { padding-bottom:80px; }
     #status { display:none; position:fixed; bottom:24px; left:50%; transform:translateX(-50%); background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:12px 20px; font-size:13px; font-family:'DM Mono',monospace; color:var(--text); z-index:9999; max-width:90vw; text-align:center; box-shadow:var(--shadow-md); }
     #status.error { border-color:var(--danger); color:var(--danger); }
@@ -202,6 +204,9 @@ const TRANSLATIONS = {
     viewAll:"Tout", viewPlayed:"Joués", viewOrganized:"Organisés",
     share:"Partager", shareCopied:"Lien copié !",
     inscrits:"Inscrits",
+    statCountriesRepresented1: "Pays représenté", 
+    statCountriesRepresentedN: "Pays représentés",
+    andMore: (n) => `+${n} autres`,
   },
   en: {
     placeholder:"start.gg ID (ex: user/abc123 or abc123)",
@@ -227,6 +232,9 @@ const TRANSLATIONS = {
     viewAll:"All", viewPlayed:"Played", viewOrganized:"Organized",
     share:"Share", shareCopied:"Link copied!",
     inscrits:"Registered",
+    statCountriesRepresented1: "Country represented",
+    statCountriesRepresentedN: "Countries represented",
+    andMore: (n) => `+${n} more`,
   }
 };
 
@@ -247,11 +255,19 @@ function applyLang() {
     const countries=+document.getElementById("statCountries").textContent;
     const games=+document.getElementById("statGames").textContent;
     const admin=+document.getElementById("statAdmin").textContent;
-    document.querySelector("#statTotal + .stat-label").textContent=total<=1?t.statTotal1:t.statTotalN;
-    document.querySelector("#statOffline + .stat-label").textContent=offline<=1?t.statOffline1:t.statOfflineN;
-    document.querySelector("#statCountries + .stat-label").textContent=countries<=1?t.statCountries1:t.statCountriesN;
-    document.querySelector("#statGames + .stat-label").textContent=games<=1?t.statGames1:t.statGamesN;
-    document.querySelector("#statAdmin + .stat-label").textContent=admin<=1?t.statAdmin1:t.statAdminN;
+    if(currentMode === "tournament") {
+      document.querySelector("#statTotal + .stat-label").textContent=t.inscrits;
+      document.querySelector("#statOffline + .stat-label").textContent=offline<=1?t.statParticipants1:t.statParticipantsN;
+      document.querySelector("#statCountries + .stat-label").textContent=countries<=1?t.statCountriesRepresented1:t.statCountriesRepresentedN;
+      document.querySelector("#statGames + .stat-label").textContent=games<=1?t.statCities1:t.statCitiesN;
+      document.querySelector("#statAdmin + .stat-label").textContent="";
+    } else {
+      document.querySelector("#statTotal + .stat-label").textContent=total<=1?t.statTotal1:t.statTotalN;
+      document.querySelector("#statOffline + .stat-label").textContent=offline<=1?t.statOffline1:t.statOfflineN;
+      document.querySelector("#statCountries + .stat-label").textContent=countries<=1?t.statCountries1:t.statCountriesN;
+      document.querySelector("#statGames + .stat-label").textContent=games<=1?t.statGames1:t.statGamesN;
+      document.querySelector("#statAdmin + .stat-label").textContent=admin<=1?t.statAdmin1:t.statAdminN;
+    }
   }
   document.querySelectorAll(".view-btn").forEach(b=>{
     b.textContent=tr()[b.dataset.view==="all"?"viewAll":b.dataset.view==="played"?"viewPlayed":"viewOrganized"];
@@ -285,6 +301,11 @@ function makeIcon(count=1,isAdmin=false) {
 async function search(slugOverride) {
   const slug=(slugOverride||document.getElementById("slugInput").value).trim();
   if(!slug) return;
+  if(slug.startsWith("tournament/") || slug.includes("start.gg/tournament/")) {
+    currentMode="tournament";
+    document.querySelectorAll(".mode-btn").forEach(b=>b.classList.toggle("active",b.dataset.mode===currentMode));
+    document.getElementById("slugInput").placeholder=tr().placeholderTournament;
+  }
   if(currentMode==="tournament") { searchTournament(slug); return; }
   document.getElementById("slugInput").value=slug;
   document.getElementById("searchBtn").disabled=true;
@@ -418,36 +439,60 @@ function renderTournamentMap({tournament,locations}) {
   const cities=new Set();
   const countries=new Set();
 
+  const NAMES_PREVIEW = 5; // how many names to show in tooltip before "+N more"
+
   for(const loc of locations) {
     if(!loc.lat||!loc.lng) continue;
     totalLocated+=loc.count;
     cities.add(`${loc.city}||${loc.country}`);
     countries.add(loc.country);
 
+    const markerSize = loc.count === 1 ? 28 : loc.count < 5 ? 32 : loc.count < 20 ? 38 : 44;
+
     const marker=L.marker([loc.lat,loc.lng],{
       icon:L.divIcon({
         className:"",
-        html:`<div class="p-marker" style="width:28px;height:28px;font-size:11px">${loc.count}</div>`,
-        iconSize:[28,28], iconAnchor:[14,14]
+        html:`<div class="p-marker" style="width:${markerSize}px;height:${markerSize}px;font-size:11px">${loc.count}</div>`,
+        iconSize:[markerSize,markerSize], iconAnchor:[markerSize/2,markerSize/2]
       })
     });
+
+    // Build popup with full player list
+    const namesList = (loc.names||[]);
+    const namesHtml = namesList.length
+      ? `<div class="popup-names">${namesList.map(n=>`<span>${n}</span>`).join(", ")}</div>`
+      : "";
+
     marker.bindPopup(`
       <div class="popup-title" style="color:var(--accent2)">${loc.city}</div>
       <div class="popup-meta">${loc.country}</div>
       <div class="popup-meta" style="margin-top:6px;color:var(--text)">${loc.count} participant${loc.count>1?"s":""}</div>
-    `);
-    marker.bindTooltip(`<b>${loc.city}</b><br><span style="color:var(--muted);font-size:10px">${loc.count} participant${loc.count>1?"s":""}</span>`,{direction:"top",offset:[0,-8],opacity:1});
+      ${namesHtml}
+    `, {maxWidth: 280});
+
+    // Build tooltip with a short preview of names
+    const previewNames = namesList.slice(0, NAMES_PREVIEW);
+    const remaining = namesList.length - previewNames.length;
+    const namesPreviewHtml = previewNames.length
+      ? `<br><span style="color:var(--muted);font-size:10px">${previewNames.join(", ")}${remaining > 0 ? ` <i>${t.andMore(remaining)}</i>` : ""}</span>`
+      : "";
+
+    marker.bindTooltip(
+      `<b>${loc.city}</b> — ${loc.count} participant${loc.count>1?"s":""}${namesPreviewHtml}`,
+      {direction:"top", offset:[0,-(markerSize/2+4)], opacity:1}
+    );
+
     tournamentCluster.addLayer(marker);
   }
 
   map.addLayer(tournamentCluster);
 
-  // Cache les éléments mode joueur
+  // Hide player-mode UI elements
   document.getElementById("filterBar").style.display="none";
   document.getElementById("timelineBar").classList.remove("visible");
   document.body.classList.remove("timeline-open");
 
-  // Stats tournoi
+  // Tournament stats
   document.getElementById("statsBar").classList.add("visible");
   document.getElementById("statTotal").textContent=tournament.total;
   document.getElementById("statOffline").textContent=totalLocated;
@@ -456,7 +501,7 @@ function renderTournamentMap({tournament,locations}) {
   document.getElementById("statAdmin").textContent="";
   document.querySelector("#statTotal + .stat-label").textContent=t.inscrits;
   document.querySelector("#statOffline + .stat-label").textContent=totalLocated<=1?t.statParticipants1:t.statParticipantsN;
-  document.querySelector("#statCountries + .stat-label").textContent=countries.size<=1?t.statCountries1:t.statCountriesN;
+  document.querySelector("#statCountries + .stat-label").textContent=countries.size<=1?t.statCountriesRepresented1:t.statCountriesRepresentedN;
   document.querySelector("#statGames + .stat-label").textContent=cities.size<=1?t.statCities1:t.statCitiesN;
   document.querySelector("#statAdmin + .stat-label").textContent="";
 
