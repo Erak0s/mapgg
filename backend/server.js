@@ -142,26 +142,6 @@ const GET_USER_EVENTS = `
   }
 `;
 
-const geocodeCache = new Map();
-async function geocodeCity(city, country) {
-  const key = `${city}||${country}`;
-  if (geocodeCache.has(key)) return geocodeCache.get(key);
-  try {
-    const q = encodeURIComponent(`${city}, ${country}`);
-    const r = await fetch(`https://nominatim.openstreetmap.org/search?q=${q}&format=json&limit=1`, {
-      headers: { "User-Agent": "mapgg/1.0" }
-    });
-    const json = await r.json();
-    if (json[0]) {
-      const coords = { lat: parseFloat(json[0].lat), lng: parseFloat(json[0].lon) };
-      geocodeCache.set(key, coords);
-      return coords;
-    }
-  } catch {}
-  geocodeCache.set(key, null);
-  return null;
-}
-
 app.get("/api/player/:slug", async (req, res) => {
   try {
     const slug = req.params.slug;
@@ -306,15 +286,8 @@ app.get("/api/tournament/:slug", async (req, res) => {
       await new Promise(r => setTimeout(r, 200));
     }
 
-    const rawLocations = [...locationMap.values()];
-    const locations = await Promise.all(
-      rawLocations.map(async (loc) => {
-        const coords = await geocodeCity(loc.city, loc.country);
-        return coords ? { ...loc, lat: coords.lat, lng: coords.lng } : null;
-      })
-    );
-    const validLocations = locations.filter(Boolean);
-    res.json({ tournament: tournamentInfo, locations: validLocations });
+    const locations = [...locationMap.values()];
+    res.json({ tournament: tournamentInfo, locations });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
