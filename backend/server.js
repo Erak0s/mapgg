@@ -153,8 +153,6 @@ const GET_TOURNAMENT_PARTICIPANTS = `
         pageInfo { total totalPages }
         nodes {
           user {
-            name
-            player { gamerTag }
             location {
               city
               country

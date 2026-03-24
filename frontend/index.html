@@ -458,23 +458,15 @@ function renderTournamentMap({tournament,locations}) {
     });
 
     // Build popup with full player list
-    const namesList = (loc.names||[]);
-
     marker.bindPopup(`
       <div class="popup-title" style="color:var(--accent2)">${loc.city}</div>
       <div class="popup-meta">${loc.country}</div>
       <div class="popup-meta" style="margin-top:6px;color:var(--text)">${loc.count} participant${loc.count>1?"s":""}</div>
     `, {maxWidth: 280});
 
-    // Build tooltip with a short preview of names
-    const previewNames = namesList.slice(0, NAMES_PREVIEW);
-    const remaining = namesList.length - previewNames.length;
-    const namesPreviewHtml = previewNames.length
-      ? `<br><span style="color:var(--muted);font-size:10px">${previewNames.join(", ")}${remaining > 0 ? ` <i>${t.andMore(remaining)}</i>` : ""}</span>`
-      : "";
-
+    // Build tooltip without a short preview of names
     marker.bindTooltip(
-      `<b>${loc.city}</b> — ${loc.count} participant${loc.count>1?"s":""}${namesPreviewHtml}`,
+      `<b>${loc.city}</b> — ${loc.count} participant${loc.count>1?"s":""}`,
       {direction:"top", offset:[0,-(markerSize/2+4)], opacity:1}
     );
 
