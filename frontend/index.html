@@ -459,15 +459,11 @@ function renderTournamentMap({tournament,locations}) {
 
     // Build popup with full player list
     const namesList = (loc.names||[]);
-    const namesHtml = namesList.length
-      ? `<div class="popup-names">${namesList.map(n=>`<span>${n}</span>`).join(", ")}</div>`
-      : "";
 
     marker.bindPopup(`
       <div class="popup-title" style="color:var(--accent2)">${loc.city}</div>
       <div class="popup-meta">${loc.country}</div>
       <div class="popup-meta" style="margin-top:6px;color:var(--text)">${loc.count} participant${loc.count>1?"s":""}</div>
-      ${namesHtml}
     `, {maxWidth: 280});
 
     // Build tooltip with a short preview of names
