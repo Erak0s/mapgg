@@ -149,7 +149,7 @@ const GET_TOURNAMENT_PARTICIPANTS = `
       lat
       lng
       images { url type }
-      participants(query: { page: $page, perPage: 500 }) {
+      participants(query: { page: $page, perPage: 400 }) {
         pageInfo { total totalPages }
         nodes {
           user {
