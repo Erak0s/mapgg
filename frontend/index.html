@@ -301,6 +301,13 @@ function makeIcon(count=1,isAdmin=false) {
 async function search(slugOverride) {
   const slug=(slugOverride||document.getElementById("slugInput").value).trim();
   if(!slug) return;
+
+  if(slug.startsWith("tournament/") || slug.includes("start.gg/tournament/")) {
+    currentMode="tournament";
+    document.querySelectorAll(".mode-btn").forEach(b=>b.classList.toggle("active",b.dataset.mode===currentMode));
+    document.getElementById("slugInput").placeholder=tr().placeholderTournament;
+  }
+
   if(slug.startsWith("tournament/") || slug.includes("start.gg/tournament/")) {
     currentMode="tournament";
     document.querySelectorAll(".mode-btn").forEach(b=>b.classList.toggle("active",b.dataset.mode===currentMode));
