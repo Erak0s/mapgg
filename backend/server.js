@@ -73,6 +73,10 @@ async function graphql(query, variables = {}) {
   return json.data;
 }
 
+// ── Normalize city/country strings for deduplication ─────────────────────
+const normalizeLocation = str =>
+  str.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+
 const GET_USER = `
   query GetUser($slug: String!) {
     user(slug: $slug) {
@@ -273,6 +277,7 @@ app.get("/api/tournaments/:userId", async (req, res) => {
   }
 });
 
+// ── Tournament participants: legacy REST endpoint ─────────────────────────
 app.get("/api/tournament/:slug", async (req, res) => {
   try {
     const slug = req.params.slug;
@@ -306,7 +311,7 @@ app.get("/api/tournament/:slug", async (req, res) => {
       for (const p of (t.participants.nodes || [])) {
         const loc = p.user?.location;
         if (!loc?.city || !loc?.country) continue;
-        const key = `${loc.city}||${loc.country}||${loc.countryId || ""}`;
+        const key = `${normalizeLocation(loc.city)}||${normalizeLocation(loc.country)}`;
         if (!locationMap.has(key)) {
           locationMap.set(key, {
             city: loc.city,
@@ -329,16 +334,95 @@ app.get("/api/tournament/:slug", async (req, res) => {
     // ── Geocode all unique cities ─────────────────────────────────────────
     const locations = [];
     for (const loc of locationMap.values()) {
-      // Rate-limit Nominatim: 1 req/s
       await new Promise(r => setTimeout(r, 1100));
       const coords = await geocodeCity(loc.city, loc.country);
-      if (!coords) continue; // skip cities that couldn't be geocoded
+      if (!coords) continue;
       locations.push({ ...loc, lat: coords.lat, lng: coords.lng });
     }
 
     res.json({ tournament: tournamentInfo, locations });
   } catch (e) {
     res.status(500).json({ error: e.message });
+  }
+});
+
+// ── Tournament participants: SSE streaming endpoint ───────────────────────
+app.get("/api/tournament/:slug/stream", async (req, res) => {
+  const slug = req.params.slug;
+
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  res.flushHeaders();
+
+  const send = (event, data) => res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+
+  try {
+    let page = 1, totalPages = 1, tournamentInfo = null;
+    const locationMap = new Map();
+
+    // ── Phase 1: fetch all participant pages ──────────────────────────────
+    while (page <= totalPages) {
+      const data = await graphql(GET_TOURNAMENT_PARTICIPANTS, { slug, page });
+      const t = data.tournament;
+      if (!t) { send("error", { error: "Tournoi introuvable" }); res.end(); return; }
+
+      if (!tournamentInfo) {
+        tournamentInfo = {
+          id: t.id, name: t.name, slug: t.slug, startAt: t.startAt,
+          city: t.city, countryCode: t.countryCode, lat: t.lat, lng: t.lng,
+          images: t.images, total: t.participants.pageInfo.total,
+        };
+        // Send tournament info as soon as we have it so the UI can show the name/avatar
+        send("info", { name: t.name, images: t.images });
+      }
+
+      totalPages = t.participants.pageInfo.totalPages;
+
+      for (const p of (t.participants.nodes || [])) {
+        const loc = p.user?.location;
+        if (!loc?.city || !loc?.country) continue;
+        const key = `${normalizeLocation(loc.city)}||${normalizeLocation(loc.country)}`;
+        if (!locationMap.has(key)) {
+          locationMap.set(key, {
+            city: loc.city,
+            country: loc.country,
+            countryId: loc.countryId || "",
+            count: 0,
+            names: [],
+          });
+        }
+        const entry = locationMap.get(key);
+        entry.count++;
+        const tag = p.user?.player?.gamerTag || p.user?.name;
+        if (tag) entry.names.push(tag);
+      }
+
+      const loaded = Math.min(page * 400, tournamentInfo.total);
+      send("progress", { page, totalPages, loaded, total: tournamentInfo.total });
+      page++;
+      await new Promise(r => setTimeout(r, 200));
+    }
+
+    // ── Phase 2: geocode unique cities ────────────────────────────────────
+    const cityList = [...locationMap.values()];
+    const locations = [];
+    let geocoded = 0;
+
+    for (const loc of cityList) {
+      await new Promise(r => setTimeout(r, 1100));
+      const coords = await geocodeCity(loc.city, loc.country);
+      geocoded++;
+      send("geocoding", { loaded: geocoded, total: cityList.length });
+      if (!coords) continue;
+      locations.push({ ...loc, lat: coords.lat, lng: coords.lng });
+    }
+
+    send("done", { tournament: tournamentInfo, locations });
+    res.end();
+  } catch (e) {
+    send("error", { error: e.message });
+    res.end();
   }
 });
 

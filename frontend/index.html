@@ -193,6 +193,7 @@ const TRANSLATIONS = {
     statCities1:"Ville représentée", statCitiesN:"Villes représentées",
     loading1:"Recherche du joueur…", loading2:"Chargement des tournois…",
     loadingTournament:"Chargement des participants…",
+    loadingGeocoding:"Géolocalisation des villes…",
     errNotFound:"Joueur introuvable", errServer:"Erreur serveur",
     errTournamentNotFound:"Tournoi introuvable",
     popupDateUnknown:"Date inconnue", popupLink:"↗ Voir sur start.gg",
@@ -221,6 +222,7 @@ const TRANSLATIONS = {
     statCities1:"City represented", statCitiesN:"Cities represented",
     loading1:"Looking up player…", loading2:"Loading tournaments…",
     loadingTournament:"Loading participants…",
+    loadingGeocoding:"Geocoding cities…",
     errNotFound:"Player not found", errServer:"Server error",
     errTournamentNotFound:"Tournament not found",
     popupDateUnknown:"Unknown date", popupLink:"↗ View on start.gg",
@@ -286,6 +288,34 @@ function showStatus(msg,type="info") {
   el.className="visible"+(type==="error"?" error":"");
   el.innerHTML=type==="loading"?`<span class="spinner"></span>${msg}`:msg;
   if(type!=="loading") setTimeout(()=>el.classList.remove("visible"),4000);
+}
+
+function showProgressBar(loaded, total, phase) {
+  const isGeocoding = phase === "geocoding";
+  const pct = isGeocoding
+    ? (total > 0 ? Math.round(loaded / total * 100) : 0)
+    : (total && total !== "?" ? Math.round(loaded / total * 100) : 0);
+  const label = isGeocoding
+    ? `${tr().loadingGeocoding} (${loaded}/${total})`
+    : total === "?"
+      ? tr().loadingTournament
+      : `${loaded} / ${total} participants…`;
+  const el = document.getElementById("status");
+  el.className = "visible";
+  el.innerHTML = `
+    <div style="display:flex;align-items:center;gap:10px;min-width:240px">
+      <span class="spinner"></span>
+      <div style="flex:1">
+        <div style="font-size:12px;margin-bottom:5px;color:var(--muted)">${label}</div>
+        <div style="background:var(--border);border-radius:4px;height:4px;overflow:hidden">
+          <div style="background:var(--accent);height:100%;width:${pct}%;border-radius:4px;transition:width .3s"></div>
+        </div>
+      </div>
+    </div>`;
+}
+
+function hideProgressBar() {
+  document.getElementById("status").classList.remove("visible");
 }
 
 function makeIcon(count=1,isAdmin=false) {
@@ -399,24 +429,48 @@ async function searchTournament(slug) {
     .replace(/\/events.*$/,"");
   document.getElementById("slugInput").value=clean;
   document.getElementById("searchBtn").disabled=true;
-  showStatus(tr().loadingTournament,"loading");
+  showProgressBar(0, "?", "participants");
   try {
-    const res=await fetch(`${BACKEND}/api/tournament/${encodeURIComponent(clean)}`);
-    const data=await res.json();
-    if(!res.ok) throw new Error(data.error||tr().errTournamentNotFound);
+    await new Promise((resolve, reject) => {
+      const evtSource = new EventSource(`${BACKEND}/api/tournament/${encodeURIComponent(clean)}/stream`);
 
-    const img=data.tournament.images?.find(i=>i.type==="profile")?.url||"";
-    document.getElementById("playerAvatar").src=img;
-    document.getElementById("playerName").textContent=data.tournament.name;
-    document.getElementById("playerCard").classList.add("visible");
+      evtSource.addEventListener("info", e => {
+        const d = JSON.parse(e.data);
+        const img = d.images?.find(i=>i.type==="profile")?.url||"";
+        document.getElementById("playerAvatar").src=img;
+        document.getElementById("playerName").textContent=d.name;
+        document.getElementById("playerCard").classList.add("visible");
+      });
 
-    const url=new URL(window.location.href);
-    url.searchParams.set("tournament",clean);
-    url.searchParams.delete("user");
-    window.history.pushState({},"",url);
-    document.getElementById("shareBtn").classList.add("visible");
+      evtSource.addEventListener("progress", e => {
+        const {loaded, total} = JSON.parse(e.data);
+        showProgressBar(loaded, total, "participants");
+      });
 
-    renderTournamentMap(data);
+      evtSource.addEventListener("geocoding", e => {
+        const {loaded, total} = JSON.parse(e.data);
+        showProgressBar(loaded, total, "geocoding");
+      });
+
+      evtSource.addEventListener("done", e => {
+        evtSource.close();
+        const data = JSON.parse(e.data);
+        hideProgressBar();
+        const url=new URL(window.location.href);
+        url.searchParams.set("tournament",clean);
+        url.searchParams.delete("user");
+        window.history.pushState({},"",url);
+        document.getElementById("shareBtn").classList.add("visible");
+        renderTournamentMap(data);
+        resolve();
+      });
+
+      evtSource.addEventListener("error", e => {
+        evtSource.close();
+        hideProgressBar();
+        reject(new Error(tr().errTournamentNotFound));
+      });
+    });
   } catch(e) {
     showStatus(e.message,"error");
   } finally {
@@ -446,8 +500,6 @@ function renderTournamentMap({tournament,locations}) {
   const cities=new Set();
   const countries=new Set();
 
-  const NAMES_PREVIEW = 5; // how many names to show in tooltip before "+N more"
-
   for(const loc of locations) {
     if(!loc.lat||!loc.lng) continue;
     totalLocated+=loc.count;
@@ -465,14 +517,12 @@ function renderTournamentMap({tournament,locations}) {
       })
     });
 
-    // Build popup with full player list
     marker.bindPopup(`
       <div class="popup-title" style="color:var(--accent2)">${loc.city}</div>
       <div class="popup-meta">${loc.country}</div>
       <div class="popup-meta" style="margin-top:6px;color:var(--text)">${loc.count} participant${loc.count>1?"s":""}</div>
     `, {maxWidth: 280});
 
-    // Build tooltip without a short preview of names
     marker.bindTooltip(
       `<b>${loc.city}</b> — ${loc.count} participant${loc.count>1?"s":""}`,
       {direction:"top", offset:[0,-(markerSize/2+4)], opacity:1}
