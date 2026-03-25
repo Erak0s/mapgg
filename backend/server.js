@@ -29,8 +29,12 @@ db.exec(`
 const stmtGet = db.prepare("SELECT lat, lng FROM geocache WHERE key = ?");
 const stmtSet = db.prepare("INSERT OR REPLACE INTO geocache (key, lat, lng) VALUES (?, ?, ?)");
 
+// ── Normalize city/country strings for deduplication ─────────────────────
+const normalizeLocation = str =>
+  str.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+
 async function geocodeCity(city, country) {
-  const key = `${city}||${country}`;
+  const key = `${normalizeLocation(city)}||${normalizeLocation(country)}`;
 
   // 1. Check SQLite cache first (synchronous, instant)
   const cached = stmtGet.get(key);
@@ -72,10 +76,6 @@ async function graphql(query, variables = {}) {
   if (json.errors) throw new Error(json.errors[0].message);
   return json.data;
 }
-
-// ── Normalize city/country strings for deduplication ─────────────────────
-const normalizeLocation = str =>
-  str.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
 
 const GET_USER = `
   query GetUser($slug: String!) {
@@ -410,7 +410,9 @@ app.get("/api/tournament/:slug/stream", async (req, res) => {
     let geocoded = 0;
 
     for (const loc of cityList) {
-      await new Promise(r => setTimeout(r, 1100));
+      const cacheKey = `${normalizeLocation(loc.city)}||${normalizeLocation(loc.country)}`;
+      const cached = stmtGet.get(cacheKey);
+      if (!cached) await new Promise(r => setTimeout(r, 1100)); // délai seulement si appel Nominatim
       const coords = await geocodeCity(loc.city, loc.country);
       geocoded++;
       send("geocoding", { loaded: geocoded, total: cityList.length });
