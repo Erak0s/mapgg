@@ -63,6 +63,18 @@
     .view-btn { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:5px 14px; color:var(--muted); font-family:'Bebas Neue',sans-serif; font-size:13px; letter-spacing:.05em; cursor:pointer; transition:all .15s; }
     .view-btn.active { background:var(--accent); border-color:var(--accent); color:var(--bg); }
     .view-btn[data-view="organized"].active { background:var(--accent2); border-color:var(--accent2); }
+
+    /* ── Tournament event filter bar ── */
+    #tournamentFilterBar { display:none; gap:8px; padding:8px 32px; background:var(--bg); border-bottom:1px solid var(--border); flex-wrap:wrap; align-items:center; }
+    #tournamentFilterBar.visible { display:flex; }
+    .t-filter-label { font-family:'DM Mono',monospace; font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.08em; flex-shrink:0; padding-right:4px; }
+    .event-filter { display:flex; align-items:center; gap:6px; background:var(--surface); border:1px solid var(--border); border-radius:20px; padding:4px 12px 4px 6px; cursor:pointer; font-size:12px; font-family:'DM Mono',monospace; color:var(--muted); transition:all .15s; user-select:none; white-space:nowrap; }
+    .event-filter img { width:18px; height:18px; border-radius:3px; object-fit:cover; flex-shrink:0; }
+    .event-filter.active { border-color:var(--accent2); color:var(--text); background:rgba(223,32,105,.08); }
+    .event-filter.active img { outline:1px solid var(--accent2); border-radius:3px; }
+    .t-filter-toggle-all { background:transparent; border:1px solid var(--border); border-radius:20px; padding:4px 10px; color:var(--muted); font-family:'DM Mono',monospace; font-size:11px; cursor:pointer; transition:all .15s; flex-shrink:0; }
+    .t-filter-toggle-all:hover { border-color:var(--accent2); color:var(--accent2); }
+
     /* ── Participant marker ── */
     .p-marker { border-radius:50%; background:var(--accent2); border:2px solid var(--bg); box-shadow:0 0 8px var(--accent2); display:flex; align-items:center; justify-content:center; font-family:'Bebas Neue',sans-serif; color:var(--bg); transition:transform .15s; }
     .p-marker:hover { transform:scale(1.2); }
@@ -155,6 +167,10 @@
   <button class="view-btn" data-view="organized"></button>
   <div class="filter-separator" id="filterSeparator" style="display:none"></div>
 </div>
+
+<!-- Tournament event filter bar (mode tournoi uniquement) -->
+<div id="tournamentFilterBar"></div>
+
 <div id="map"></div>
 <div id="timelineBar">
   <div id="timelineTop">
@@ -208,6 +224,8 @@ const TRANSLATIONS = {
     statCountriesRepresented1: "Pays représenté", 
     statCountriesRepresentedN: "Pays représentés",
     andMore: (n) => `+${n} autres`,
+    tFilterLabel: "Bracket :",
+    tFilterAll: "Tous",
   },
   en: {
     placeholder:"start.gg ID (ex: user/abc123 or abc123)",
@@ -237,6 +255,8 @@ const TRANSLATIONS = {
     statCountriesRepresented1: "Country represented",
     statCountriesRepresentedN: "Countries represented",
     andMore: (n) => `+${n} more`,
+    tFilterLabel: "Bracket:",
+    tFilterAll: "All",
   }
 };
 
@@ -244,6 +264,11 @@ let lang="fr";
 const tr=()=>TRANSLATIONS[lang];
 
 let currentMode="player", tournamentCluster=null;
+
+// ── Tournament event filter state ─────────────────────────────────────────
+let tournamentEvents=[];       // [{ id, name, videogame }]
+let activeEventIds=new Set();  // IDs currently shown (empty = all)
+let allTournamentLocations=[];  // raw locations from backend
 
 function applyLang() {
   document.getElementById("slugInput").placeholder=currentMode==="player"?tr().placeholder:tr().placeholderTournament;
@@ -274,6 +299,12 @@ function applyLang() {
   document.querySelectorAll(".view-btn").forEach(b=>{
     b.textContent=tr()[b.dataset.view==="all"?"viewAll":b.dataset.view==="played"?"viewPlayed":"viewOrganized"];
   });
+  // Re-render tournament filter label if visible
+  const tfBar=document.getElementById("tournamentFilterBar");
+  const lbl=tfBar.querySelector(".t-filter-label");
+  if(lbl) lbl.textContent=tr().tFilterLabel;
+  const allBtn=tfBar.querySelector(".t-filter-toggle-all");
+  if(allBtn) allBtn.textContent=tr().tFilterAll;
 }
 
 const map=L.map("map",{center:[20,0],zoom:2,zoomControl:true});
@@ -410,6 +441,7 @@ function renderMap({total,offline,adminOffline,tournaments},playerName) {
   document.querySelector("#statTotal + .stat-label").textContent=total<=1?t.statTotal1:t.statTotalN;
   document.getElementById("statsBar").classList.add("visible");
   document.getElementById("filterBar").style.display="";
+  document.getElementById("tournamentFilterBar").classList.remove("visible");
   showStatus(t.statusDone(playerName,offline),"info");
   buildFilterBar(tournaments);
   buildTimeline(tournaments);
@@ -440,6 +472,10 @@ async function searchTournament(slug) {
         document.getElementById("playerAvatar").src=img;
         document.getElementById("playerName").textContent=d.name;
         document.getElementById("playerCard").classList.add("visible");
+        // Build event filter bar as soon as we have the event list
+        if(d.events && d.events.length > 0) {
+          buildTournamentFilterBar(d.events);
+        }
       });
 
       evtSource.addEventListener("progress", e => {
@@ -456,6 +492,10 @@ async function searchTournament(slug) {
         evtSource.close();
         const data = JSON.parse(e.data);
         hideProgressBar();
+        // Update events if we got them in done (fallback)
+        if(data.events && data.events.length > 0 && tournamentEvents.length === 0) {
+          buildTournamentFilterBar(data.events);
+        }
         const url=new URL(window.location.href);
         url.searchParams.set("tournament",clean);
         url.searchParams.delete("user");
@@ -478,54 +518,219 @@ async function searchTournament(slug) {
   }
 }
 
-function renderTournamentMap({tournament,locations}) {
-  if(clusterGroup){map.removeLayer(clusterGroup);clusterGroup=null;}
-  if(tournamentCluster){map.removeLayer(tournamentCluster);tournamentCluster=null;}
+// ── Build tournament event filter bar ────────────────────────────────────
+function buildTournamentFilterBar(events) {
+  tournamentEvents = events;
+  // Start with all events active
+  activeEventIds = new Set(events.map(e => e.id));
 
-  tournamentCluster=L.markerClusterGroup({
-    iconCreateFunction: c=>{
-      const total=c.getAllChildMarkers().reduce((sum,m)=>sum+(m.options.participantCount||0),0);
-      const size=total<10?32:total<50?38:44;
+  const bar = document.getElementById("tournamentFilterBar");
+  bar.innerHTML = "";
+
+  if(events.length <= 1) {
+    // Only one event: no filter needed
+    bar.classList.remove("visible");
+    return;
+  }
+
+  // Label
+  const lbl = document.createElement("span");
+  lbl.className = "t-filter-label";
+  lbl.textContent = tr().tFilterLabel;
+  bar.appendChild(lbl);
+
+  // "All" toggle button
+  const allBtn = document.createElement("button");
+  allBtn.className = "t-filter-toggle-all";
+  allBtn.textContent = tr().tFilterAll;
+  allBtn.addEventListener("click", () => {
+    const allActive = activeEventIds.size === events.length;
+    if(allActive) {
+      // Deselect all
+      activeEventIds.clear();
+      bar.querySelectorAll(".event-filter").forEach(b => b.classList.remove("active"));
+    } else {
+      // Select all
+      activeEventIds = new Set(events.map(e => e.id));
+      bar.querySelectorAll(".event-filter").forEach(b => b.classList.add("active"));
+    }
+    applyTournamentFilters();
+  });
+  bar.appendChild(allBtn);
+
+  // One badge per event
+  for(const evt of events) {
+    const badge = document.createElement("div");
+    badge.className = "event-filter active";
+    badge.dataset.eventId = evt.id;
+
+    const imgUrl = evt.videogame?.imageUrl;
+    if(imgUrl) {
+      const img = document.createElement("img");
+      img.src = imgUrl;
+      img.alt = evt.videogame.name;
+      badge.appendChild(img);
+    }
+
+    const nameSpan = document.createElement("span");
+    nameSpan.textContent = evt.name;
+    badge.appendChild(nameSpan);
+
+    badge.addEventListener("click", () => {
+      if(activeEventIds.has(evt.id)) {
+        activeEventIds.delete(evt.id);
+        badge.classList.remove("active");
+      } else {
+        activeEventIds.add(evt.id);
+        badge.classList.add("active");
+      }
+      applyTournamentFilters();
+    });
+
+    bar.appendChild(badge);
+  }
+
+  bar.classList.add("visible");
+}
+
+// ── Apply tournament event filters to the cluster ────────────────────────
+function applyTournamentFilters() {
+  if(!tournamentCluster || allTournamentLocations.length === 0) return;
+  map.removeLayer(tournamentCluster);
+
+  const allActive = activeEventIds.size === tournamentEvents.length;
+
+  tournamentCluster = L.markerClusterGroup({
+    iconCreateFunction: c => {
+      const total = c.getAllChildMarkers().reduce((sum, m) => sum + (m.options.participantCount || 0), 0);
+      const size = total < 10 ? 32 : total < 50 ? 38 : 44;
       return L.divIcon({
-        className:"",
-        html:`<div class="p-marker" style="width:${size}px;height:${size}px;font-size:${size<38?11:13}px">${total}</div>`,
-        iconSize:[size,size], iconAnchor:[size/2,size/2]
+        className: "",
+        html: `<div class="p-marker" style="width:${size}px;height:${size}px;font-size:${size < 38 ? 11 : 13}px">${total}</div>`,
+        iconSize: [size, size], iconAnchor: [size / 2, size / 2]
       });
     },
-    maxClusterRadius:60, spiderfyOnMaxZoom:true, showCoverageOnHover:false,
+    maxClusterRadius: 60, spiderfyOnMaxZoom: true, showCoverageOnHover: false,
   });
 
-  const t=tr();
-  let totalLocated=0;
-  const cities=new Set();
-  const countries=new Set();
+  const t = tr();
+  let totalLocated = 0;
+  const cities = new Set();
+  const countries = new Set();
 
-  for(const loc of locations) {
-    if(!loc.lat||!loc.lng) continue;
-    totalLocated+=loc.count;
+  for(const loc of allTournamentLocations) {
+    if(!loc.lat || !loc.lng) continue;
+
+    // Filter: keep only if at least one active event matches
+    const locEventIds = loc.eventIds || [];
+    const visible = allActive || locEventIds.some(id => activeEventIds.has(id));
+    if(!visible) continue;
+
+    // Count only participants registered in active events
+    const count = allActive
+      ? loc.count
+      : Object.entries(loc.eventCounts || {})
+          .filter(([eid]) => activeEventIds.has(eid))
+          .reduce((sum, [, n]) => sum + n, 0);
+
+    if(count === 0) continue;
+
+    totalLocated += count;
     cities.add(`${loc.city}||${loc.country}`);
     countries.add(loc.country);
 
-    const markerSize = loc.count === 1 ? 28 : loc.count < 5 ? 32 : loc.count < 20 ? 38 : 44;
+    const markerSize = count === 1 ? 28 : count < 5 ? 32 : count < 20 ? 38 : 44;
 
-    const marker=L.marker([loc.lat,loc.lng],{
-      participantCount: loc.count,
-      icon:L.divIcon({
-        className:"",
-        html:`<div class="p-marker" style="width:${markerSize}px;height:${markerSize}px;font-size:11px">${loc.count}</div>`,
-        iconSize:[markerSize,markerSize], iconAnchor:[markerSize/2,markerSize/2]
+    const marker = L.marker([loc.lat, loc.lng], {
+      participantCount: count,
+      icon: L.divIcon({
+        className: "",
+        html: `<div class="p-marker" style="width:${markerSize}px;height:${markerSize}px;font-size:11px">${count}</div>`,
+        iconSize: [markerSize, markerSize], iconAnchor: [markerSize / 2, markerSize / 2]
       })
     });
 
     marker.bindPopup(`
       <div class="popup-title" style="color:var(--accent2)">${loc.city}</div>
       <div class="popup-meta">${loc.country}</div>
-      <div class="popup-meta" style="margin-top:6px;color:var(--text)">${loc.count} participant${loc.count>1?"s":""}</div>
-    `, {maxWidth: 280});
+      <div class="popup-meta" style="margin-top:6px;color:var(--text)">${count} participant${count > 1 ? "s" : ""}</div>
+    `, { maxWidth: 280 });
 
     marker.bindTooltip(
-      `<b>${loc.city}</b> — ${loc.count} participant${loc.count>1?"s":""}`,
-      {direction:"top", offset:[0,-(markerSize/2+4)], opacity:1}
+      `<b>${loc.city}</b> — ${count} participant${count > 1 ? "s" : ""}`,
+      { direction: "top", offset: [0, -(markerSize / 2 + 4)], opacity: 1 }
+    );
+
+    tournamentCluster.addLayer(marker);
+  }
+
+  map.addLayer(tournamentCluster);
+
+  // Update stats
+  document.getElementById("statOffline").textContent = totalLocated;
+  document.getElementById("statCountries").textContent = countries.size;
+  document.getElementById("statGames").textContent = cities.size;
+  document.querySelector("#statOffline + .stat-label").textContent = totalLocated <= 1 ? t.statParticipants1 : t.statParticipantsN;
+  document.querySelector("#statCountries + .stat-label").textContent = countries.size <= 1 ? t.statCountriesRepresented1 : t.statCountriesRepresentedN;
+  document.querySelector("#statGames + .stat-label").textContent = cities.size <= 1 ? t.statCities1 : t.statCitiesN;
+}
+
+function renderTournamentMap({tournament, locations, events}) {
+  if(clusterGroup){map.removeLayer(clusterGroup);clusterGroup=null;}
+  if(tournamentCluster){map.removeLayer(tournamentCluster);tournamentCluster=null;}
+
+  // Store locations globally for filter re-application
+  allTournamentLocations = locations;
+
+  // If events were sent in "done" and filter bar not yet built
+  if(events && events.length > 1 && tournamentEvents.length === 0) {
+    buildTournamentFilterBar(events);
+  }
+
+  tournamentCluster = L.markerClusterGroup({
+    iconCreateFunction: c => {
+      const total = c.getAllChildMarkers().reduce((sum, m) => sum + (m.options.participantCount || 0), 0);
+      const size = total < 10 ? 32 : total < 50 ? 38 : 44;
+      return L.divIcon({
+        className: "",
+        html: `<div class="p-marker" style="width:${size}px;height:${size}px;font-size:${size < 38 ? 11 : 13}px">${total}</div>`,
+        iconSize: [size, size], iconAnchor: [size / 2, size / 2]
+      });
+    },
+    maxClusterRadius: 60, spiderfyOnMaxZoom: true, showCoverageOnHover: false,
+  });
+
+  const t = tr();
+  let totalLocated = 0;
+  const cities = new Set();
+  const countries = new Set();
+
+  for(const loc of locations) {
+    if(!loc.lat || !loc.lng) continue;
+    totalLocated += loc.count;
+    cities.add(`${loc.city}||${loc.country}`);
+    countries.add(loc.country);
+
+    const markerSize = loc.count === 1 ? 28 : loc.count < 5 ? 32 : loc.count < 20 ? 38 : 44;
+
+    const marker = L.marker([loc.lat, loc.lng], {
+      participantCount: loc.count,
+      icon: L.divIcon({
+        className: "",
+        html: `<div class="p-marker" style="width:${markerSize}px;height:${markerSize}px;font-size:11px">${loc.count}</div>`,
+        iconSize: [markerSize, markerSize], iconAnchor: [markerSize / 2, markerSize / 2]
+      })
+    });
+
+    marker.bindPopup(`
+      <div class="popup-title" style="color:var(--accent2)">${loc.city}</div>
+      <div class="popup-meta">${loc.country}</div>
+      <div class="popup-meta" style="margin-top:6px;color:var(--text)">${loc.count} participant${loc.count > 1 ? "s" : ""}</div>
+    `, { maxWidth: 280 });
+
+    marker.bindTooltip(
+      `<b>${loc.city}</b> — ${loc.count} participant${loc.count > 1 ? "s" : ""}`,
+      { direction: "top", offset: [0, -(markerSize / 2 + 4)], opacity: 1 }
     );
 
     tournamentCluster.addLayer(marker);
@@ -534,31 +739,31 @@ function renderTournamentMap({tournament,locations}) {
   map.addLayer(tournamentCluster);
 
   // Hide player-mode UI elements
-  document.getElementById("filterBar").style.display="none";
+  document.getElementById("filterBar").style.display = "none";
   document.getElementById("timelineBar").classList.remove("visible");
   document.body.classList.remove("timeline-open");
 
   // Tournament stats
   document.getElementById("statsBar").classList.add("visible");
-  document.getElementById("statTotal").textContent=tournament.total;
-  document.getElementById("statOffline").textContent=totalLocated;
-  document.getElementById("statCountries").textContent=countries.size;
-  document.getElementById("statGames").textContent=cities.size;
-  document.getElementById("statAdmin").textContent="";
-  document.querySelector("#statTotal + .stat-label").textContent=t.inscrits;
-  document.querySelector("#statOffline + .stat-label").textContent=totalLocated<=1?t.statParticipants1:t.statParticipantsN;
-  document.querySelector("#statCountries + .stat-label").textContent=countries.size<=1?t.statCountriesRepresented1:t.statCountriesRepresentedN;
-  document.querySelector("#statGames + .stat-label").textContent=cities.size<=1?t.statCities1:t.statCitiesN;
-  document.querySelector("#statAdmin + .stat-label").textContent="";
+  document.getElementById("statTotal").textContent = tournament.total;
+  document.getElementById("statOffline").textContent = totalLocated;
+  document.getElementById("statCountries").textContent = countries.size;
+  document.getElementById("statGames").textContent = cities.size;
+  document.getElementById("statAdmin").textContent = "";
+  document.querySelector("#statTotal + .stat-label").textContent = t.inscrits;
+  document.querySelector("#statOffline + .stat-label").textContent = totalLocated <= 1 ? t.statParticipants1 : t.statParticipantsN;
+  document.querySelector("#statCountries + .stat-label").textContent = countries.size <= 1 ? t.statCountriesRepresented1 : t.statCountriesRepresentedN;
+  document.querySelector("#statGames + .stat-label").textContent = cities.size <= 1 ? t.statCities1 : t.statCitiesN;
+  document.querySelector("#statAdmin + .stat-label").textContent = "";
 
-  showStatus(t.statusTournamentDone(tournament.name,totalLocated,tournament.total),"info");
+  showStatus(t.statusTournamentDone(tournament.name, totalLocated, tournament.total), "info");
 
-  setTimeout(()=>{
-    if(tournamentCluster){
-      const b=tournamentCluster.getBounds();
-      if(b.isValid()) map.fitBounds(b,{padding:[40,40],maxZoom:8});
+  setTimeout(() => {
+    if(tournamentCluster) {
+      const b = tournamentCluster.getBounds();
+      if(b.isValid()) map.fitBounds(b, { padding: [40, 40], maxZoom: 8 });
     }
-  },100);
+  }, 100);
 }
 
 function buildFilterBar(tournaments) {
@@ -774,9 +979,13 @@ document.querySelectorAll(".mode-btn").forEach(b=>b.addEventListener("click",()=
   document.getElementById("shareBtn").classList.remove("visible");
   document.getElementById("filterBar").style.display="";
   document.getElementById("timelineBar").classList.remove("visible");
+  document.getElementById("tournamentFilterBar").classList.remove("visible");
   document.body.classList.remove("timeline-open");
   if(clusterGroup){map.removeLayer(clusterGroup);clusterGroup=null;}
   if(tournamentCluster){map.removeLayer(tournamentCluster);tournamentCluster=null;}
+  tournamentEvents=[];
+  activeEventIds=new Set();
+  allTournamentLocations=[];
 }));
 
 // ── Events ────────────────────────────────────────────────────────────────

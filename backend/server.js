@@ -141,6 +141,23 @@ const GET_ADMIN_TOURNAMENTS = `
   }
 `;
 
+// ── Fetch tournament events (brackets) ───────────────────────────────────
+const GET_TOURNAMENT_EVENTS = `
+  query GetTournamentEvents($slug: String!) {
+    tournament(slug: $slug) {
+      events {
+        id
+        name
+        videogame {
+          name
+          images { url type }
+        }
+      }
+    }
+  }
+`;
+
+// ── Fetch participants with their event entrants ──────────────────────────
 const GET_TOURNAMENT_PARTICIPANTS = `
   query GetTournamentParticipants($slug: String!, $page: Int!) {
     tournament(slug: $slug) {
@@ -156,6 +173,11 @@ const GET_TOURNAMENT_PARTICIPANTS = `
       participants(query: { page: $page, perPage: 400 }) {
         pageInfo { total totalPages }
         nodes {
+          entrants {
+            event {
+              id
+            }
+          }
           user {
             location {
               city
@@ -319,12 +341,16 @@ app.get("/api/tournament/:slug", async (req, res) => {
             countryId: loc.countryId || "",
             count: 0,
             names: [],
+            eventIds: new Set(),
           });
         }
         const entry = locationMap.get(key);
         entry.count++;
         const tag = p.user?.player?.gamerTag || p.user?.name;
         if (tag) entry.names.push(tag);
+        for (const entrant of (p.entrants || [])) {
+          if (entrant.event?.id) entry.eventIds.add(String(entrant.event.id));
+        }
       }
 
       page++;
@@ -337,7 +363,7 @@ app.get("/api/tournament/:slug", async (req, res) => {
       await new Promise(r => setTimeout(r, 1100));
       const coords = await geocodeCity(loc.city, loc.country);
       if (!coords) continue;
-      locations.push({ ...loc, lat: coords.lat, lng: coords.lng });
+      locations.push({ ...loc, eventIds: [...loc.eventIds], lat: coords.lat, lng: coords.lng });
     }
 
     res.json({ tournament: tournamentInfo, locations });
@@ -358,6 +384,21 @@ app.get("/api/tournament/:slug/stream", async (req, res) => {
   const send = (event, data) => res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
 
   try {
+    // ── Fetch tournament events (brackets) first ──────────────────────────
+    const eventsData = await graphql(GET_TOURNAMENT_EVENTS, { slug });
+    const tournamentEvents = (eventsData.tournament?.events || []).map(e => ({
+      id: String(e.id),
+      name: e.name,
+      videogame: e.videogame
+        ? {
+            name: e.videogame.name,
+            imageUrl: e.videogame.images?.find(i => i.type === "profile")?.url
+              || e.videogame.images?.[0]?.url
+              || null,
+          }
+        : null,
+    }));
+
     let page = 1, totalPages = 1, tournamentInfo = null;
     const locationMap = new Map();
 
@@ -373,8 +414,8 @@ app.get("/api/tournament/:slug/stream", async (req, res) => {
           city: t.city, countryCode: t.countryCode, lat: t.lat, lng: t.lng,
           images: t.images, total: t.participants.pageInfo.total,
         };
-        // Send tournament info as soon as we have it so the UI can show the name/avatar
-        send("info", { name: t.name, images: t.images });
+        // Send tournament info + events as soon as we have it
+        send("info", { name: t.name, images: t.images, events: tournamentEvents });
       }
 
       totalPages = t.participants.pageInfo.totalPages;
@@ -390,12 +431,22 @@ app.get("/api/tournament/:slug/stream", async (req, res) => {
             countryId: loc.countryId || "",
             count: 0,
             names: [],
+            eventIds: new Set(),
+            eventCounts: {},
           });
         }
         const entry = locationMap.get(key);
         entry.count++;
         const tag = p.user?.player?.gamerTag || p.user?.name;
         if (tag) entry.names.push(tag);
+        // Collect event IDs and per-event counts for this participant
+        for (const entrant of (p.entrants || [])) {
+          if (entrant.event?.id) {
+            const eid = String(entrant.event.id);
+            entry.eventIds.add(eid);
+            entry.eventCounts[eid] = (entry.eventCounts[eid] || 0) + 1;
+          }
+        }
       }
 
       const loaded = Math.min(page * 400, tournamentInfo.total);
@@ -412,15 +463,16 @@ app.get("/api/tournament/:slug/stream", async (req, res) => {
     for (const loc of cityList) {
       const cacheKey = `${normalizeLocation(loc.city)}||${normalizeLocation(loc.country)}`;
       const cached = stmtGet.get(cacheKey);
-      if (!cached) await new Promise(r => setTimeout(r, 1100)); // délai seulement si appel Nominatim
+      if (!cached) await new Promise(r => setTimeout(r, 1100));
       const coords = await geocodeCity(loc.city, loc.country);
       geocoded++;
       send("geocoding", { loaded: geocoded, total: cityList.length });
       if (!coords) continue;
-      locations.push({ ...loc, lat: coords.lat, lng: coords.lng });
+      // Serialize Set → Array for JSON
+      locations.push({ ...loc, eventIds: [...loc.eventIds], eventCounts: loc.eventCounts, lat: coords.lat, lng: coords.lng });
     }
 
-    send("done", { tournament: tournamentInfo, locations });
+    send("done", { tournament: tournamentInfo, locations, events: tournamentEvents });
     res.end();
   } catch (e) {
     send("error", { error: e.message });
