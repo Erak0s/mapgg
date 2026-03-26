@@ -2,6 +2,9 @@ import express from "express";
 import cors from "cors";
 import Database from "better-sqlite3";
 
+const delay = (ms) => new Promise(r => setTimeout(r, ms));
+let geocodeQueue = Promise.resolve();
+
 const app = express();
 app.use(cors({
   origin: [
@@ -36,28 +39,48 @@ const normalizeLocation = str =>
 async function geocodeCity(city, country) {
   const key = `${normalizeLocation(city)}||${normalizeLocation(country)}`;
 
-  // 1. Check SQLite cache first (synchronous, instant)
+  // cache hit
   const cached = stmtGet.get(key);
-  if (cached) return cached.lat !== null ? { lat: cached.lat, lng: cached.lng } : null;
+  if (cached && cached.lat !== null && cached.lng !== null) {
+    return { lat: cached.lat, lng: cached.lng };
+  }
 
-  // 2. Not in cache — call Nominatim
   try {
-    const query = encodeURIComponent(`${city}, ${country}`);
+    const query = encodeURIComponent([city, country].filter(Boolean).join(", "));
     const url = `https://nominatim.openstreetmap.org/search?q=${query}&format=json&limit=1`;
+
     const res = await fetch(url, {
       headers: { "User-Agent": "mapgg-tournament-map/1.0" }
     });
-    const data = await res.json();
-    if (data && data[0]) {
-      const coords = { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
-      stmtSet.run(key, coords.lat, coords.lng);
-      return coords;
-    }
-  } catch (e) {
-    console.warn(`Geocode failed for ${city}, ${country}:`, e.message);
-  }
 
-  return null;
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+    const data = await res.json();
+
+    if (data && data.length) {
+      const lat = parseFloat(data[0].lat);
+      const lng = parseFloat(data[0].lon);
+
+      stmtSet.run(key, lat, lng); // cache ONLY success
+      return { lat, lng };
+    }
+
+    console.log("❌ Geocode failed:", city, country);
+    return null;
+
+  } catch (e) {
+    console.warn(`🔥 Geocode error for ${city}, ${country}:`, e.message);
+    return null;
+  }
+}
+
+function queueGeocode(city, country) {
+  geocodeQueue = geocodeQueue.then(async () => {
+    const result = await queueGeocode(city, country);
+    await delay(1200);
+    return result;
+  });
+  return geocodeQueue;
 }
 
 async function graphql(query, variables = {}) {
@@ -362,7 +385,7 @@ app.get("/api/tournament/:slug", async (req, res) => {
     const locations = [];
     for (const loc of locationMap.values()) {
       await new Promise(r => setTimeout(r, 1100));
-      const coords = await geocodeCity(loc.city, loc.country);
+      const coords = await queueGeocode(loc.city, loc.country);
       if (!coords) {
         console.log("❌ Geocode failed:", loc.city, loc.country);
       }
@@ -468,7 +491,7 @@ app.get("/api/tournament/:slug/stream", async (req, res) => {
       const cacheKey = `${normalizeLocation(loc.city)}||${normalizeLocation(loc.country)}`;
       const cached = stmtGet.get(cacheKey);
       if (!cached) await new Promise(r => setTimeout(r, 1100));
-      const coords = await geocodeCity(loc.city, loc.country);
+      const coords = await queueGeocode(loc.city, loc.country);
       geocoded++;
       send("geocoding", { loaded: geocoded, total: cityList.length });
       if (!coords) continue;
