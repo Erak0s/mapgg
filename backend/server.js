@@ -73,7 +73,10 @@ async function graphql(query, variables = {}) {
   });
   if (!res.ok) throw new Error(`start.gg HTTP ${res.status}`);
   const json = await res.json();
-  if (json.errors) throw new Error(json.errors[0].message);
+  if (json.errors) {
+    console.error("GraphQL error:", JSON.stringify(json.errors));
+    throw new Error(json.errors[0].message);
+  }
   return json.data;
 }
 
@@ -170,7 +173,7 @@ const GET_TOURNAMENT_PARTICIPANTS = `
       lat
       lng
       images { url type }
-      participants(query: { page: $page, perPage: 400 }) {
+      participants(query: { page: $page, perPage: 100 }) {
         pageInfo { total totalPages }
         nodes {
           entrants {
@@ -475,6 +478,7 @@ app.get("/api/tournament/:slug/stream", async (req, res) => {
     send("done", { tournament: tournamentInfo, locations, events: tournamentEvents });
     res.end();
   } catch (e) {
+    console.error("Stream error for", slug, ":", e.message, e.stack);
     send("error", { error: e.message });
     res.end();
   }
