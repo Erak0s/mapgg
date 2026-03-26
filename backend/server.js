@@ -57,8 +57,6 @@ async function geocodeCity(city, country) {
     console.warn(`Geocode failed for ${city}, ${country}:`, e.message);
   }
 
-  // Store null result to avoid re-querying unknown cities
-  stmtSet.run(key, null, null);
   return null;
 }
 
@@ -365,6 +363,9 @@ app.get("/api/tournament/:slug", async (req, res) => {
     for (const loc of locationMap.values()) {
       await new Promise(r => setTimeout(r, 1100));
       const coords = await geocodeCity(loc.city, loc.country);
+      if (!coords) {
+        console.log("❌ Geocode failed:", loc.city, loc.country);
+      }
       if (!coords) continue;
       locations.push({ ...loc, eventIds: [...loc.eventIds], lat: coords.lat, lng: coords.lng });
     }
