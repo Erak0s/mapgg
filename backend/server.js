@@ -364,8 +364,10 @@ app.get("/api/tournament/:slug", async (req, res) => {
       await new Promise(r => setTimeout(r, 1100));
       const coords = await geocodeCity(loc.city, loc.country);
       if (!coords) {
-        console.log("❌ Geocode failed:", loc.city, loc.country);
+        console.warn(`❌ Geocode null: "${loc.city}", "${loc.country}" (key: ${cacheKey})`);
+        continue;
       }
+      console.log(`✅ Geocoded: ${loc.city} → ${coords.lat}, ${coords.lng}`);
       if (!coords) continue;
       locations.push({ ...loc, eventIds: [...loc.eventIds], lat: coords.lat, lng: coords.lng });
     }
@@ -467,7 +469,7 @@ app.get("/api/tournament/:slug/stream", async (req, res) => {
     for (const loc of cityList) {
       const cacheKey = `${normalizeLocation(loc.city)}||${normalizeLocation(loc.country)}`;
       const cached = stmtGet.get(cacheKey);
-      if (!cached) await new Promise(r => setTimeout(r, 1100));
+      if (!cached) await new Promise(r => setTimeout(r, 1500));
       const coords = await geocodeCity(loc.city, loc.country);
       geocoded++;
       send("geocoding", { loaded: geocoded, total: cityList.length });
