@@ -1,6 +1,9 @@
 import express from "express";
 import cors from "cors";
-import Database from "better-sqlite3";
+import { Firestore } from "@google-cloud/firestore";
+
+const firestore = new Firestore();
+const geocacheCol = firestore.collection("geocache");
 
 const app = express();
 app.use(cors({
@@ -17,18 +20,6 @@ app.use(express.json());
 const STARTGG_API_KEY = "4084825f7edcee7e793552fbf5f46648";
 const STARTGG_ENDPOINT = "https://api.start.gg/gql/alpha";
 
-// ── Geocoding cache (SQLite) ──────────────────────────────────────────────
-const db = new Database("geocache.db");
-db.exec(`
-  CREATE TABLE IF NOT EXISTS geocache (
-    key     TEXT PRIMARY KEY,
-    lat     REAL,
-    lng     REAL
-  )
-`);
-const stmtGet = db.prepare("SELECT lat, lng FROM geocache WHERE key = ?");
-const stmtSet = db.prepare("INSERT OR REPLACE INTO geocache (key, lat, lng) VALUES (?, ?, ?)");
-
 // ── Normalize city/country strings for deduplication ─────────────────────
 const normalizeLocation = str =>
   str.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
@@ -36,27 +27,33 @@ const normalizeLocation = str =>
 async function geocodeCity(city, country) {
   const key = `${normalizeLocation(city)}||${normalizeLocation(country)}`;
 
-  // 1. Check SQLite cache first (synchronous, instant)
-  const cached = stmtGet.get(key);
-  if (cached) return cached.lat !== null ? { lat: cached.lat, lng: cached.lng } : null;
+  // 1. Cache Firestore
+  const doc = await geocacheCol.doc(key).get();
+  if (doc.exists) {
+    const d = doc.data();
+    return d.lat !== null ? { lat: d.lat, lng: d.lng } : null;
+  }
 
-  // 2. Not in cache — call Nominatim
+  // 2. Nominatim
+  await new Promise(r => setTimeout(r, 1500));
   try {
     const query = encodeURIComponent(`${city}, ${country}`);
-    const url = `https://nominatim.openstreetmap.org/search?q=${query}&format=json&limit=1`;
-    const res = await fetch(url, {
-      headers: { "User-Agent": "mapgg-tournament-map/1.0" }
-    });
+    const res = await fetch(
+      `https://nominatim.openstreetmap.org/search?q=${query}&format=json&limit=1`,
+      { headers: { "User-Agent": "mapgg-tournament-map/1.0" } }
+    );
     const data = await res.json();
-    if (data && data[0]) {
+    if (data?.[0]) {
       const coords = { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
-      stmtSet.run(key, coords.lat, coords.lng);
+      await geocacheCol.doc(key).set(coords);  // persiste pour toujours
       return coords;
     }
   } catch (e) {
     console.warn(`Geocode failed for ${city}, ${country}:`, e.message);
   }
 
+  // Échec → on stocke null pour ne pas re-requêter
+  await geocacheCol.doc(key).set({ lat: null, lng: null });
   return null;
 }
 
